@@ -56,6 +56,8 @@ import {
   VerseItem,
 } from "./data/bibleData";
 
+import SharePulpitFlow from "./components/SharePulpitFlow";
+
 const STORAGE_KEY = "pulpitflow_sermons_v3";
 
 function formatSpokenPunctuation(text: string): string {
@@ -1391,7 +1393,7 @@ ${transitionHtml}`;
       }}
     >
       {/* TOP NAVIGATION BAR */}
-      <header className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between gap-4 flex-none z-30">
+      <header className="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-4 flex-none z-30">
         {/* Left: Brand & Sermon Switcher */}
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2.5 shrink-0">
@@ -1530,6 +1532,7 @@ ${transitionHtml}`;
 
         {/* Right: Primary Workspace Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          <SharePulpitFlow />
           <button
             type="button"
             onClick={() => setMobileShowBible((v) => !v)}
