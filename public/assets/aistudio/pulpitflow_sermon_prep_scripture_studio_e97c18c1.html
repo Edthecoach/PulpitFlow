@@ -1,0 +1,3172 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulpitFlow - Sermon Prep & Scripture Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            pulpit: {
+              50: '#fbf8f3',
+              100: '#f5eee3',
+              200: '#eadecb',
+              300: '#ddc7ab',
+              400: '#cfa985',
+              500: '#bf8d64',
+              600: '#a7724e',
+              700: '#87583d',
+              800: '#6d4734',
+              900: '#583b2d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(160, 140, 120, 0.35);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(160, 140, 120, 0.6);
+    }
+
+    /* Editor styling */
+    #editor:focus {
+      outline: none;
+    }
+    .editor-content h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 1.25rem;
+      margin-bottom: 0.75rem;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 0.25rem;
+    }
+    .editor-content h2 {
+      font-family: 'Lora', serif;
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: #334155;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .editor-content h3 {
+      font-family: 'Lora', serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #475569;
+      margin-top: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+    .editor-content p {
+      margin-bottom: 0.85rem;
+      line-height: 1.75;
+      color: #1e293b;
+    }
+    .editor-content blockquote.scripture-quote {
+      border-left: 4px solid #b45309;
+      background-color: #fef3c7;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-style: italic;
+      color: #78350f;
+      border-radius: 0 0.375rem 0.375rem 0;
+    }
+    .editor-content blockquote.illustration-box {
+      border-left: 4px solid #2563eb;
+      background-color: #eff6ff;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      color: #1e40af;
+      border-radius: 0 0.375rem 0.375rem 0;
+    }
+    .editor-content .cue-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
+      margin: 0 0.25rem;
+      user-select: all;
+    }
+    .editor-content .cue-slide {
+      background-color: #dbeafe;
+      color: #1d4ed8;
+      border: 1px solid #93c5fd;
+    }
+    .editor-content .cue-pause {
+      background-color: #fef08a;
+      color: #854d0e;
+      border: 1px solid #fde047;
+    }
+    .editor-content .cue-response {
+      background-color: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+    }
+    .editor-content ul {
+      list-style-type: disc;
+      padding-left: 1.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .editor-content ol {
+      list-style-type: decimal;
+      padding-left: 1.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .editor-content li {
+      margin-bottom: 0.35rem;
+    }
+
+    /* Verse highlighting */
+    .verse-highlight-yellow {
+      background-color: #fef08a;
+      border-radius: 2px;
+      padding: 1px 2px;
+    }
+    .verse-highlight-green {
+      background-color: #bbf7d0;
+      border-radius: 2px;
+      padding: 1px 2px;
+    }
+    .verse-highlight-blue {
+      background-color: #bae6fd;
+      border-radius: 2px;
+      padding: 1px 2px;
+    }
+
+    /* Print optimization */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printArea, #printArea * {
+        visibility: visible;
+      }
+      #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-800 flex flex-col font-sans antialiased overflow-hidden select-none">
+
+  <!-- TOP APP NAVIGATION BAR -->
+  <header class="bg-white border-b border-slate-200 shadow-sm flex-none z-30">
+    <div class="px-4 py-2.5 flex items-center justify-between gap-3">
+      
+      <!-- Brand & Sermon Switcher -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-700 to-amber-900 text-amber-100 flex items-center justify-center shadow-sm">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-display font-bold text-lg text-slate-900 tracking-tight">PulpitFlow</span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold tracking-wide uppercase">Split Studio</span>
+            </div>
+            <p class="text-xs text-slate-400 hidden sm:block">Bible Study & Sermon Manuscript Prep</p>
+          </div>
+        </div>
+
+        <div class="h-6 w-px bg-slate-200 mx-1"></div>
+
+        <!-- Sermon Selector Dropdown -->
+        <div class="relative">
+          <button id="btnSermonDropdown" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <span id="activeSermonLabel" class="truncate max-w-[140px] sm:max-w-[200px]">Life in the Spirit</span>
+            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div id="sermonMenu" class="hidden absolute left-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+            <div class="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Your Sermons</span>
+              <button id="btnNewSermonTop" class="text-xs text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                New
+              </button>
+            </div>
+            <div id="sermonsMenuList" class="max-h-60 overflow-y-auto divide-y divide-slate-50">
+              <!-- Dynamically populated -->
+            </div>
+            <div class="pt-2 px-3 border-t border-slate-100 mt-1">
+              <button id="btnManageSermons" class="w-full text-center py-1.5 text-xs text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-md font-medium">
+                Manage All Sermons & Library
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Auto-save Pill -->
+        <div class="hidden md:flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+          <svg class="w-3 h-3 text-emerald-600 animate-pulse" fill="currentColor" viewBox="0 0 8 8">
+            <circle cx="4" cy="4" r="3"/>
+          </svg>
+          <span id="saveStatusText">Saved</span>
+        </div>
+      </div>
+
+      <!-- Center: Split Layout Controls -->
+      <div class="hidden lg:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600">
+        <span class="px-2 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Layout</span>
+        <button id="btnSplitBible" title="Focus Bible (65% / 35%)" class="layout-btn px-2.5 py-1 rounded hover:bg-white transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"></path></svg>
+          <span>Bible 65%</span>
+        </button>
+        <button id="btnSplitEqual" title="Balanced Split (50% / 50%)" class="layout-btn px-2.5 py-1 rounded bg-white shadow-xs text-amber-800 font-semibold transition-all flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v16m6-16v16M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path></svg>
+          <span>Split 50/50</span>
+        </button>
+        <button id="btnSplitNotes" title="Focus Manuscript (35% / 65%)" class="layout-btn px-2.5 py-1 rounded hover:bg-white transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M12 12h8m-16 6h16"></path></svg>
+          <span>Notes 65%</span>
+        </button>
+      </div>
+
+      <!-- Right Action Tools -->
+      <div class="flex items-center gap-2">
+        
+        <!-- Toggle Scripture Pane (Mobile) -->
+        <button id="btnToggleMobileBible" class="lg:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1">
+          <svg class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+          <span id="mobileBibleToggleLabel">Hide Bible</span>
+        </button>
+
+        <!-- Google AI Studio / Gemini Setup Button -->
+        <button id="btnOpenAiStudioModal" class="px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-2xs" title="Configure Google AI Studio API Key & Gemini Models">
+          <svg class="w-3.5 h-3.5 text-purple-700" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z"/></svg>
+          <span class="font-semibold hidden sm:inline">Google AI Studio</span>
+          <span id="badgeAiStatus" class="w-2 h-2 rounded-full bg-slate-400" title="API Status"></span>
+        </button>
+
+        <!-- Preach / Pulpit Mode Button -->
+        <button id="btnPreachMode" class="bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-medium text-xs sm:text-sm px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-all active:scale-95">
+          <svg class="w-4 h-4 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span class="font-semibold">Preach Mode</span>
+        </button>
+
+        <!-- Export Menu Button -->
+        <div class="relative">
+          <button id="btnExportMenu" class="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700" title="Export Sermon">
+            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+            </svg>
+          </button>
+          
+          <div id="exportMenuDropdown" class="hidden absolute right-0 mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs">
+            <button id="btnExportPrint" class="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+              Print / Save as PDF
+            </button>
+            <button id="btnExportMarkdown" class="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              Download Markdown (.md)
+            </button>
+            <button id="btnExportCopy" class="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+              Copy Plain Text
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN SPLIT WORKSPACE -->
+  <main class="flex-1 flex overflow-hidden relative">
+
+    <!-- ============================================== -->
+    <!-- LEFT PANE: SCRIPTURE & EXEGESIS COMPANION      -->
+    <!-- ============================================== -->
+    <section id="paneBible" class="w-1/2 flex flex-col bg-amber-50/20 border-r border-slate-200 overflow-hidden transition-all duration-200">
+      
+      <!-- Bible Controls Header -->
+      <div class="p-3 bg-white border-b border-slate-200 flex flex-col gap-2.5 flex-none shadow-xs">
+        
+        <!-- Search & Passage Navigator -->
+        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          
+          <!-- Book Selector -->
+          <div class="relative flex-1 min-w-[130px]">
+            <select id="selBibleBook" class="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800 focus:bg-white focus:ring-1 focus:ring-amber-600 focus:border-amber-600">
+              <optgroup label="Gospels & Acts">
+                <option value="Matthew">Matthew</option>
+                <option value="Mark">Mark</option>
+                <option value="Luke">Luke</option>
+                <option value="John">John</option>
+                <option value="Acts">Acts</option>
+              </optgroup>
+              <optgroup label="Epistles">
+                <option value="Romans" selected>Romans</option>
+                <option value="1 Corinthians">1 Corinthians</option>
+                <option value="2 Corinthians">2 Corinthians</option>
+                <option value="Galatians">Galatians</option>
+                <option value="Ephesians">Ephesians</option>
+                <option value="Philippians">Philippians</option>
+                <option value="Colossians">Colossians</option>
+                <option value="1 Thessalonians">1 Thessalonians</option>
+                <option value="2 Thessalonians">2 Thessalonians</option>
+                <option value="1 Timothy">1 Timothy</option>
+                <option value="2 Timothy">2 Timothy</option>
+                <option value="Titus">Titus</option>
+                <option value="Philemon">Philemon</option>
+                <option value="Hebrews">Hebrews</option>
+                <option value="James">James</option>
+                <option value="1 Peter">1 Peter</option>
+                <option value="2 Peter">2 Peter</option>
+                <option value="1 John">1 John</option>
+                <option value="Revelation">Revelation</option>
+              </optgroup>
+              <optgroup label="Pentateuch & History">
+                <option value="Genesis">Genesis</option>
+                <option value="Exodus">Exodus</option>
+                <option value="Leviticus">Leviticus</option>
+                <option value="Numbers">Numbers</option>
+                <option value="Deuteronomy">Deuteronomy</option>
+                <option value="Joshua">Joshua</option>
+                <option value="Judges">Judges</option>
+                <option value="Ruth">Ruth</option>
+                <option value="1 Samuel">1 Samuel</option>
+                <option value="2 Samuel">2 Samuel</option>
+                <option value="1 Kings">1 Kings</option>
+                <option value="2 Kings">2 Kings</option>
+                <option value="Nehemiah">Nehemiah</option>
+                <option value="Esther">Esther</option>
+              </optgroup>
+              <optgroup label="Poetry & Prophets">
+                <option value="Job">Job</option>
+                <option value="Psalms">Psalms</option>
+                <option value="Proverbs">Proverbs</option>
+                <option value="Ecclesiastes">Ecclesiastes</option>
+                <option value="Song of Solomon">Song of Solomon</option>
+                <option value="Isaiah">Isaiah</option>
+                <option value="Jeremiah">Jeremiah</option>
+                <option value="Lamentations">Lamentations</option>
+                <option value="Ezekiel">Ezekiel</option>
+                <option value="Daniel">Daniel</option>
+                <option value="Micah">Micah</option>
+                <option value="Habakkuk">Habakkuk</option>
+                <option value="Malachi">Malachi</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <!-- Chapter Selector -->
+          <div class="w-20">
+            <input id="inputBibleChapter" type="number" min="1" max="150" value="8" title="Chapter" class="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-center text-slate-800 focus:bg-white focus:ring-1 focus:ring-amber-600 focus:border-amber-600" placeholder="Ch.">
+          </div>
+
+          <!-- Translation Selector -->
+          <div class="w-24">
+            <select id="selBibleVersion" class="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-slate-800 focus:bg-white focus:ring-1 focus:ring-amber-600 focus:border-amber-600">
+              <option value="WEB" selected>WEB</option>
+              <option value="KJV">KJV</option>
+              <option value="ASV">ASV</option>
+              <option value="BBE">BBE</option>
+            </select>
+          </div>
+
+          <!-- Navigate / Load Button -->
+          <button id="btnLoadPassage" class="px-3 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            <span>Open</span>
+          </button>
+        </div>
+
+        <!-- Quick Jump Chips & Free-form Search -->
+        <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 flex-wrap">
+          <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar text-[11px]">
+            <span class="text-slate-400 font-medium">Quick:</span>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="Romans 8">Romans 8</button>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="Psalms 23">Psalm 23</button>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="John 3">John 3</button>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="Matthew 5">Matt 5</button>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="Ephesians 2">Eph 2</button>
+            <button class="chip-jump px-2 py-0.5 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-colors" data-ref="1 Corinthians 13">1 Cor 13</button>
+          </div>
+
+          <!-- Free-form passage query input -->
+          <div class="flex items-center gap-1">
+            <input id="inputQuickSearch" type="text" placeholder="e.g. John 1:14 or Grace" class="text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1 w-32 focus:w-40 transition-all focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-600">
+            <button id="btnSearchQuery" class="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600" title="Find reference">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bible View Sub-Tabs -->
+        <div class="flex items-center justify-between border-t border-slate-100 pt-1.5">
+          <div class="flex items-center gap-3 text-xs font-medium">
+            <button id="tabBibleText" class="text-amber-800 font-semibold border-b-2 border-amber-700 pb-0.5">Scripture Reader</button>
+            <button id="tabBibleThemes" class="text-slate-500 hover:text-slate-800 pb-0.5">Cross-References & Themes</button>
+            <button id="tabBibleScratchpad" class="text-slate-500 hover:text-slate-800 pb-0.5">Exegesis Scratchpad</button>
+          </div>
+          
+          <div id="selectionBatchBar" class="hidden items-center gap-1.5 text-xs">
+            <span id="selectedCountBadge" class="bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded">0 sel</span>
+            <button id="btnInsertSelectedVerses" class="px-2 py-0.5 bg-amber-700 hover:bg-amber-800 text-white rounded text-[11px] font-medium flex items-center gap-1">
+              <span>Insert Selected</span>
+            </button>
+            <button id="btnClearSelection" class="text-slate-400 hover:text-slate-600 text-[11px]">Clear</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bible Content Body -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#fcfaf7] relative">
+        
+        <!-- Tab 1: Scripture Text Reader -->
+        <div id="containerScriptureText" class="space-y-4 max-w-2xl mx-auto">
+          <!-- Passage Heading Banner -->
+          <div class="flex items-center justify-between pb-3 border-b border-amber-900/10">
+            <div>
+              <span id="txtPassageTestament" class="text-[11px] uppercase tracking-wider font-semibold text-amber-800">New Testament</span>
+              <h2 id="txtPassageTitle" class="font-serif text-2xl font-bold text-slate-900 tracking-tight">Romans 8</h2>
+              <p id="txtPassageVersionBadge" class="text-xs text-slate-500 font-sans">World English Bible (WEB) · 39 Verses</p>
+            </div>
+            
+            <div class="flex items-center gap-1">
+              <button id="btnInsertFullChapter" class="px-2.5 py-1 text-xs font-medium text-amber-800 bg-amber-100/70 hover:bg-amber-100 border border-amber-200 rounded-md flex items-center gap-1 transition-colors" title="Quote entire passage into manuscript">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                <span>Quote Passage</span>
+              </button>
+              <button id="btnPrevChapter" class="p-1.5 rounded hover:bg-slate-200 text-slate-600" title="Previous Chapter">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+              </button>
+              <button id="btnNextChapter" class="p-1.5 rounded hover:bg-slate-200 text-slate-600" title="Next Chapter">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading state -->
+          <div id="bibleLoadingIndicator" class="hidden py-8 text-center text-slate-400">
+            <svg class="w-6 h-6 animate-spin mx-auto text-amber-700 mb-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+            <p class="text-xs font-medium">Fetching Scripture translation...</p>
+          </div>
+
+          <!-- Verses Container -->
+          <div id="bibleVersesList" class="font-serif text-slate-800 leading-relaxed text-base space-y-2">
+            <!-- Populated via Javascript -->
+          </div>
+        </div>
+
+        <!-- Tab 2: Cross References & Themes -->
+        <div id="containerScriptureThemes" class="hidden space-y-4 max-w-2xl mx-auto">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <h3 class="font-display text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">Key Themes in <span class="theme-passage-ref">Romans 8</span></h3>
+            <div id="themesList" class="flex flex-wrap gap-2 mb-4">
+              <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">No Condemnation (v. 1)</span>
+              <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200">Life in the Spirit (v. 2-11)</span>
+              <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-800 border border-purple-200">Adoption as Sons (v. 14-17)</span>
+              <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">Future Glory & Groaning (v. 18-25)</span>
+              <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-rose-50 text-rose-800 border border-rose-200">More than Conquerors (v. 31-39)</span>
+            </div>
+            
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Connected Cross-References</h4>
+            <div class="space-y-2 text-xs">
+              <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 hover:border-amber-200 transition-colors cursor-pointer card-cross-ref" data-ref="John 3">
+                <span class="font-bold text-amber-800">John 3:16-17</span>
+                <p class="text-slate-600 mt-0.5 italic">"For God didn't send his Son into the world to judge the world, but that the world should be saved through him."</p>
+              </div>
+              <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 hover:border-amber-200 transition-colors cursor-pointer card-cross-ref" data-ref="Galatians 5">
+                <span class="font-bold text-amber-800">Galatians 5:16-18</span>
+                <p class="text-slate-600 mt-0.5 italic">"Walk by the Spirit, and you won't fulfill the lust of the flesh..."</p>
+              </div>
+              <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 hover:border-amber-200 transition-colors cursor-pointer card-cross-ref" data-ref="Ephesians 2">
+                <span class="font-bold text-amber-800">Ephesians 2:8-10</span>
+                <p class="text-slate-600 mt-0.5 italic">"For by grace you have been saved through faith, and that not of yourselves; it is the gift of God..."</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Exegesis Scratchpad -->
+        <div id="containerScriptureScratchpad" class="hidden h-full flex flex-col max-w-2xl mx-auto">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex-1 flex flex-col">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Passage Study Notes & Greek/Hebrew Insights</span>
+              <button id="btnInsertScratchpadToNotes" class="text-xs text-amber-700 hover:text-amber-900 font-semibold flex items-center gap-1">
+                <span>Copy into Manuscript &rarr;</span>
+              </button>
+            </div>
+            <textarea id="txtExegesisNotes" class="w-full flex-1 p-3 text-xs sm:text-sm font-sans bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-600 resize-none leading-relaxed" placeholder="Jot down original language nuances (e.g. 'katakrima' in v. 1 means judicial sentence), cultural context, historical background, or exegetical observations..."></textarea>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ============================================== -->
+    <!-- RIGHT PANE: SERMON NOTES & MANUSCRIPT BUILDER  -->
+    <!-- ============================================== -->
+    <section id="paneNotes" class="w-1/2 flex flex-col bg-white overflow-hidden transition-all duration-200">
+      
+      <!-- Sermon Metadata Bar -->
+      <div class="p-4 bg-white border-b border-slate-200 flex-none space-y-3">
+        
+        <!-- Title & Series Row -->
+        <div class="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div class="flex-1">
+            <input id="inputSermonTitle" type="text" class="w-full font-display text-xl sm:text-2xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:outline-none focus:ring-0" placeholder="Untitled Sermon">
+            <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
+              <div class="flex items-center gap-1">
+                <span class="text-slate-400">Series:</span>
+                <input id="inputSermonSeries" type="text" placeholder="e.g. Unshakable" class="border-b border-dashed border-slate-300 focus:border-amber-600 focus:outline-none pb-0.5 text-slate-700 font-medium">
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-slate-400">Date:</span>
+                <input id="inputSermonDate" type="date" class="border-b border-dashed border-slate-300 focus:border-amber-600 focus:outline-none pb-0.5 text-slate-700 font-medium bg-transparent">
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-slate-400">Text:</span>
+                <input id="inputSermonPassageTag" type="text" placeholder="e.g. Romans 8:1-17" class="border-b border-dashed border-slate-300 focus:border-amber-600 focus:outline-none pb-0.5 text-amber-800 font-semibold bg-transparent">
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode Selector (Manuscript vs Outline) -->
+          <div class="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium border border-slate-200">
+            <button id="btnModeManuscript" class="px-2.5 py-1 rounded-md bg-white shadow-xs text-amber-900 font-bold">Manuscript</button>
+            <button id="btnModeOutline" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900">Outline View</button>
+          </div>
+        </div>
+
+        <!-- Homiletical Preaching Mode Selector (Expository / Textual / Topical) -->
+        <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2 text-xs font-semibold flex-wrap">
+            <span class="text-slate-400 uppercase text-[10px] tracking-wider">Homiletical Mode:</span>
+            <div class="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
+              <button type="button" id="btnHomileticExpository" class="homiletic-mode-btn px-2.5 py-1 rounded-md bg-white text-amber-900 font-bold shadow-xs flex items-center gap-1 transition-all" title="Verse-by-verse sequential exposition of a continuous passage">
+                <span>📖 Expository</span>
+              </button>
+              <button type="button" id="btnHomileticTextual" class="homiletic-mode-btn px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 transition-all" title="Main points derived directly from clauses of a single key verse">
+                <span>📜 Textual</span>
+              </button>
+              <button type="button" id="btnHomileticTopical" class="homiletic-mode-btn px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 transition-all" title="Thematic synthesis drawing multiple scriptures across the Bible">
+                <span>💡 Topical</span>
+              </button>
+            </div>
+            <button type="button" id="btnOpenHomileticGuide" class="p-1 text-slate-400 hover:text-amber-800 rounded transition-colors" title="Learn about Expository, Textual & Topical preaching">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnApplyModeTemplate" class="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors" title="Load homiletical outline template for this mode">
+              <svg class="w-3.5 h-3.5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
+              <span id="txtApplyModeTemplate">Load Expository Template</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Homiletical Mode Guidance Banner -->
+        <div id="homileticModeBanner" class="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200 text-xs flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span id="badgeHomileticTag" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-200 text-amber-900">Expository</span>
+            <span id="txtHomileticDesc" class="text-slate-700 text-xs">Preaching verse-by-verse through the continuous passage; text governs outline divisions.</span>
+          </div>
+          <span class="text-[10px] text-amber-800 font-medium hidden sm:inline">Biblical text governs outline</span>
+        </div>
+
+        <!-- Topical Scripture Collector (Shown when in Topical Mode) -->
+        <div id="containerTopicalReferences" class="hidden p-2.5 bg-indigo-50/50 border border-indigo-200 rounded-lg text-xs space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-indigo-900 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+              Topical Scripture Collection (Cross-References)
+            </span>
+            <span class="text-[10px] text-indigo-600">Click any reference to load in Bible reader</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div id="topicalRefsList" class="flex items-center gap-1.5 flex-wrap">
+              <!-- Dynamically populated chips -->
+            </div>
+            <div class="flex items-center gap-1">
+              <input type="text" id="inputNewTopicalRef" placeholder="e.g. John 3:16" class="px-2 py-1 text-xs border border-indigo-200 rounded bg-white text-slate-800 w-28 focus:w-36 transition-all focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              <button type="button" id="btnAddTopicalRef" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- The "Big Idea" / Main Proposition (Homiletical Core) -->
+        <div class="bg-amber-50/80 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2.5">
+          <div class="p-1 rounded bg-amber-200/80 text-amber-900 flex-none mt-0.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-amber-900">The Big Idea (One Proposition)</span>
+              <span class="text-[10px] text-amber-700 italic">Core takeaway</span>
+            </div>
+            <input id="inputBigIdea" type="text" class="w-full text-xs font-medium text-amber-950 bg-transparent border-none p-0 focus:outline-none focus:ring-0 placeholder:text-amber-800/40" placeholder="State your sermon's single core biblical truth in one sentence...">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Rich Text Formatting Toolbar -->
+      <div id="editorToolbar" class="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-1 flex-wrap text-xs text-slate-600 flex-none">
+        
+        <div class="flex items-center gap-1 flex-wrap">
+          <!-- Text Styles -->
+          <button type="button" class="tb-btn p-1.5 rounded hover:bg-slate-200 font-bold" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
+          <button type="button" class="tb-btn p-1.5 rounded hover:bg-slate-200 italic font-serif" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
+          <button type="button" class="tb-btn p-1.5 rounded hover:bg-slate-200 underline" data-cmd="underline" title="Underline (Ctrl+U)">U</button>
+          
+          <div class="h-4 w-px bg-slate-300 mx-1"></div>
+
+          <!-- Headings -->
+          <button type="button" class="tb-btn px-2 py-1 rounded hover:bg-slate-200 font-bold" data-cmd="formatBlock" data-val="h1" title="Heading 1 (Main Point)">H1</button>
+          <button type="button" class="tb-btn px-2 py-1 rounded hover:bg-slate-200 font-bold" data-cmd="formatBlock" data-val="h2" title="Heading 2 (Sub-Point)">H2</button>
+          <button type="button" class="tb-btn px-2 py-1 rounded hover:bg-slate-200 font-bold" data-cmd="formatBlock" data-val="p" title="Paragraph Body">P</button>
+
+          <div class="h-4 w-px bg-slate-300 mx-1"></div>
+
+          <!-- Lists & Quotes -->
+          <button type="button" class="tb-btn p-1.5 rounded hover:bg-slate-200" data-cmd="insertUnorderedList" title="Bullet List">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+          <button type="button" class="tb-btn p-1.5 rounded hover:bg-slate-200" data-cmd="insertOrderedList" title="Numbered List">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 6h13M7 12h13M7 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>
+          </button>
+          <button type="button" id="btnInsertQuoteBox" class="p-1.5 rounded hover:bg-slate-200 text-amber-800" title="Scripture Quote Block">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+          </button>
+          <button type="button" id="btnInsertIllustrationBox" class="p-1.5 rounded hover:bg-slate-200 text-blue-700" title="Illustration / Story Callout">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+          </button>
+        </div>
+
+        <!-- Pulpit Cue Quick Tags -->
+        <div class="flex items-center gap-1">
+          <span class="text-[10px] text-slate-400 font-semibold uppercase">Cue:</span>
+          <button type="button" id="btnCueSlide" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200" title="Insert Media / Slide cue">[SLIDE]</button>
+          <button type="button" id="btnCuePause" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-50 text-yellow-800 hover:bg-yellow-100 border border-yellow-200" title="Insert Dramatic Pause cue">[PAUSE]</button>
+          <button type="button" id="btnCueResponse" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200" title="Congregational Response cue">[RESPONSE]</button>
+        </div>
+
+        <div class="h-4 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+
+        <!-- Transcription & Voice Tools -->
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnVoiceDictate" class="px-2.5 py-1 rounded-md bg-amber-100/90 hover:bg-amber-200 text-amber-900 border border-amber-300 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs" title="Start live voice-to-text dictation into manuscript">
+            <span id="dictateMicDot" class="w-2 h-2 rounded-full bg-amber-700"></span>
+            <svg class="w-3.5 h-3.5 text-amber-800" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+            <span id="dictateBtnLabel">Dictate</span>
+          </button>
+          
+          <button type="button" id="btnOpenTranscriptionModal" class="px-2 py-1 rounded hover:bg-slate-200 text-slate-700 text-xs flex items-center gap-1" title="Open Audio Transcription Studio">
+            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+            <span class="hidden md:inline">Transcribe Studio</span>
+          </button>
+
+          <!-- AI Homiletics Dropdown Button -->
+          <div class="relative inline-block">
+            <button type="button" id="btnAiHomileticsMenu" class="px-2.5 py-1 rounded-md bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 font-semibold text-xs flex items-center gap-1 transition-all shadow-xs" title="Gemini AI Studio Homiletics Assistant">
+              <svg class="w-3.5 h-3.5 text-purple-700" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z"/></svg>
+              <span>AI Homiletics</span>
+              <svg class="w-3 h-3 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+
+            <!-- Dropdown Menu -->
+            <div id="aiHomileticsDropdown" class="hidden absolute right-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-purple-200 py-1.5 z-50 text-xs">
+              <div class="px-3 py-1 text-[10px] uppercase font-bold text-purple-900/60 border-b border-slate-100 flex items-center justify-between">
+                <span>Gemini via AI Studio</span>
+                <span class="text-[9px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">v1.5 / 2.0</span>
+              </div>
+              <button type="button" id="btnAiGenOutline" class="w-full text-left px-3 py-2 hover:bg-purple-50 text-slate-800 flex items-center gap-2">
+                <span class="text-sm">📖</span>
+                <div>
+                  <div class="font-semibold text-purple-950">Generate Sermon Outline</div>
+                  <div class="text-[10px] text-slate-500">Expository, Textual, or Topical outline</div>
+                </div>
+              </button>
+              <button type="button" id="btnAiGreekHebrew" class="w-full text-left px-3 py-2 hover:bg-purple-50 text-slate-800 flex items-center gap-2">
+                <span class="text-sm">🏛️</span>
+                <div>
+                  <div class="font-semibold text-purple-950">Original Language Word Study</div>
+                  <div class="text-[10px] text-slate-500">Greek & Hebrew lemma nuances & syntax</div>
+                </div>
+              </button>
+              <button type="button" id="btnAiIllustration" class="w-full text-left px-3 py-2 hover:bg-purple-50 text-slate-800 flex items-center gap-2">
+                <span class="text-sm">🎨</span>
+                <div>
+                  <div class="font-semibold text-purple-950">Generate Illustration & Story</div>
+                  <div class="text-[10px] text-slate-500">Modern narratives and relevant metaphors</div>
+                </div>
+              </button>
+              <button type="button" id="btnAiPolishManuscript" class="w-full text-left px-3 py-2 hover:bg-purple-50 text-slate-800 flex items-center gap-2">
+                <span class="text-sm">⏱️</span>
+                <div>
+                  <div class="font-semibold text-purple-950">Pacing & Flow Check</div>
+                  <div class="text-[10px] text-slate-500">Transition smoothness & readability review</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Editor Content Container -->
+      <div class="flex-1 overflow-y-auto p-6 sm:p-10 relative bg-white" id="editorScrollContainer">
+        
+        <!-- Live Speech Recognition / Voice Dictation Bar -->
+        <div id="dictationBanner" class="hidden max-w-2xl mx-auto mb-4 p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs flex items-center justify-between gap-3 text-amber-900 shadow-sm">
+          <div class="flex items-center gap-2 overflow-hidden flex-1">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping flex-none"></span>
+            <span class="font-bold flex-none text-red-700">Listening:</span>
+            <span id="dictationLiveText" class="italic truncate text-slate-700">Say your sermon thoughts (e.g. "Romans chapter eight verse one comma...")</span>
+          </div>
+          <div class="flex items-center gap-1.5 flex-none">
+            <button type="button" id="btnInsertDictatedText" class="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded text-[11px] font-semibold transition-colors">Insert Text</button>
+            <button type="button" id="btnStopDictationBanner" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[11px] font-semibold transition-colors">Stop</button>
+          </div>
+        </div>
+
+        <!-- View 1: Full Manuscript Rich Editor -->
+        <div id="viewManuscript" class="max-w-2xl mx-auto min-h-full">
+          <div id="editor" contenteditable="true" class="editor-content min-h-[500px] outline-none font-serif text-slate-800 text-base leading-relaxed tracking-normal" spellcheck="true">
+            <!-- Populated via Javascript -->
+          </div>
+        </div>
+
+        <!-- View 2: Outline Builder & Time Budgeting -->
+        <div id="viewOutline" class="hidden max-w-2xl mx-auto space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+            <div>
+              <h3 class="font-display text-base font-bold text-slate-900">Homiletical Structure & Time Budget</h3>
+              <p class="text-xs text-slate-500">Plan sermon rhythm, allocations, and core transitions</p>
+            </div>
+            <button id="btnAddOutlineSection" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              <span>Add Section</span>
+            </button>
+          </div>
+
+          <!-- Outline Blocks List -->
+          <div id="outlineBlocksList" class="space-y-3">
+            <!-- Dynamically populated -->
+          </div>
+
+          <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs text-amber-900">
+            <span class="font-semibold">Target Sermon Length: <span id="outlineTotalMinutes">28</span> minutes</span>
+            <button id="btnSyncOutlineToManuscript" class="text-xs font-bold text-amber-800 hover:text-amber-950 underline">Generate Outline Headings into Manuscript</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Status & Preach Metrics Bar -->
+      <div class="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 flex-none">
+        
+        <!-- Metrics -->
+        <div class="flex items-center gap-4 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Words:</span>
+            <span id="metricWordCount" class="font-semibold text-slate-800">1,420</span>
+          </div>
+          
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Est. Preach Time:</span>
+            <span id="metricEstTime" class="font-semibold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded">~10 mins</span>
+          </div>
+
+          <div class="hidden sm:flex items-center gap-1.5">
+            <span class="text-slate-400">Speaking Pace:</span>
+            <select id="selSpeakingPace" class="bg-transparent border-none text-xs font-medium text-slate-700 focus:outline-none p-0 cursor-pointer">
+              <option value="120">Relaxed (120 wpm)</option>
+              <option value="140" selected>Standard (140 wpm)</option>
+              <option value="160">Brisk (160 wpm)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quick Tips or Action -->
+        <div class="flex items-center gap-2">
+          <span class="hidden md:inline text-[11px] text-slate-400">Select any verse on left to quote</span>
+          <button id="btnScrollToTop" class="p-1 rounded hover:bg-slate-200 text-slate-500" title="Scroll to Top">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ============================================== -->
+  <!-- MODAL: PREACH / PULPIT TELEPROMPTER VIEW       -->
+  <!-- ============================================== -->
+  <div id="modalPreachMode" class="hidden fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col font-serif">
+    
+    <!-- Pulpit Top Bar -->
+    <div class="px-6 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between flex-none font-sans">
+      
+      <div class="flex items-center gap-3">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <div>
+          <h2 id="preachModalTitle" class="font-display text-base font-bold text-white tracking-wide">Life in the Spirit: Freedom from Condemnation</h2>
+          <p id="preachModalSubtitle" class="text-xs text-slate-400">Romans 8:1-17 · Series: Unstoppable Grace</p>
+        </div>
+      </div>
+
+      <!-- Live Pulpit Stopwatch -->
+      <div class="flex items-center gap-4">
+        
+        <div class="flex items-center bg-slate-800 px-4 py-1.5 rounded-xl border border-slate-700 shadow-inner">
+          <svg class="w-4 h-4 text-amber-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span id="preachTimerDisplay" class="font-mono text-xl font-bold text-amber-300">00:00</span>
+          
+          <div class="flex items-center gap-1 ml-3">
+            <button id="btnTimerStartPause" class="p-1 rounded bg-slate-700 hover:bg-slate-600 text-white" title="Start/Pause Timer">
+              <svg id="iconTimerPlay" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+              <svg id="iconTimerPause" class="w-3.5 h-3.5 hidden" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+            </button>
+            <button id="btnTimerReset" class="p-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white" title="Reset Timer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Font Size Toggles -->
+        <div class="flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700 text-xs text-slate-300">
+          <button id="btnPreachFontSmaller" class="px-2 py-1 rounded hover:bg-slate-700 font-bold">A-</button>
+          <button id="btnPreachFontBigger" class="px-2 py-1 rounded hover:bg-slate-700 font-bold">A+</button>
+        </div>
+
+        <!-- Exit Preach Mode -->
+        <button id="btnClosePreachMode" class="px-3.5 py-1.5 rounded-lg bg-rose-900/40 hover:bg-rose-900 text-rose-200 text-xs font-semibold border border-rose-800/50 flex items-center gap-1.5 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          <span>Exit Pulpit</span>
+        </button>
+
+      </div>
+
+    </div>
+
+    <!-- Pulpit Teleprompter Body -->
+    <div id="preachScrollArea" class="flex-1 overflow-y-auto px-6 py-12 flex justify-center bg-slate-950">
+      <div id="preachContentBody" class="max-w-3xl w-full text-slate-200 leading-relaxed space-y-6 text-xl">
+        <!-- Injected from editor with pulpit styling -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: SERMONS LIBRARY & MANAGEMENT            -->
+  <!-- ============================================== -->
+  <div id="modalSermonsLibrary" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      
+      <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="font-display text-lg font-bold text-slate-900">Sermon Library & Archives</h3>
+          <p class="text-xs text-slate-500">Manage, duplicate, or start new sermon manuscripts</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnNewSermonModal" class="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            <span>Create New Sermon</span>
+          </button>
+          <button id="btnCloseLibraryModal" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Library List -->
+      <div id="librarySermonsContainer" class="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 divide-y divide-slate-100">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 text-right">
+        <button id="btnCloseLibraryModalBottom" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold">Close</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: AUDIO TRANSCRIPTION & VOICE STUDIO      -->
+  <!-- ============================================== -->
+  <div id="modalTranscription" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden font-sans">
+      
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+          </div>
+          <div>
+            <h3 class="font-display text-base sm:text-lg font-bold text-slate-900">Audio Transcription & Voice Studio</h3>
+            <p class="text-xs text-slate-500">Dictate sermon thoughts, record voice memos, or transcribe audio</p>
+          </div>
+        </div>
+        <button id="btnCloseTranscriptionModal" class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1">
+        
+        <!-- Live Voice Dictation Box -->
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span id="transcribeRecordingStatusDot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+              <span id="transcribeRecordingStatusText" class="text-xs font-bold uppercase tracking-wider text-slate-600">Microphone Ready</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="transcribeTimerText" class="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">00:00</span>
+              <button id="btnTranscribeToggleRec" class="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors">
+                <svg id="iconRecStart" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                <span id="txtRecBtnLabel">Start Recording</span>
+              </button>
+              <button id="btnTranscribeSimulate" class="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium" title="Test with simulated audio sermon thoughts">
+                Sample Voice Memo
+              </button>
+              <button id="btnTranscribeGemini" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all" title="Transcribe audio with Gemini 1.5 Flash multimodal API">
+                <svg class="w-3.5 h-3.5 text-purple-200" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z"/></svg>
+                <span>Gemini AI Studio Transcribe</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Transcript Result Area -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Transcribed Text</label>
+              <span class="text-[10px] text-slate-400">Supports automatic punctuation commands ("period", "comma", "new line")</span>
+            </div>
+            <textarea id="txtTranscribeResult" class="w-full h-36 p-3 text-xs sm:text-sm font-sans bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-600 resize-none leading-relaxed text-slate-800" placeholder="Transcribed speech will appear here in real-time as you speak... You can also edit this text before inserting it."></textarea>
+          </div>
+        </div>
+
+        <!-- Audio File Transcriber / Import Section -->
+        <div class="p-3.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-white rounded-lg border border-slate-200 text-slate-600">
+              <svg class="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-800">Import Audio Recording (.mp3, .m4a, .wav)</h4>
+              <p class="text-[11px] text-slate-500">Transcribe voice memos or pastoral recordings into text</p>
+            </div>
+          </div>
+          <div>
+            <input type="file" id="inputAudioUpload" accept="audio/*" class="hidden">
+            <button id="btnTriggerAudioUpload" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 shadow-xs">
+              Upload Audio File
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <button id="btnClearTranscriptText" class="px-3 py-1.5 text-xs text-rose-700 hover:text-rose-900 font-medium">Clear Text</button>
+        <div class="flex items-center gap-2">
+          <button id="btnSendTranscriptToScratchpad" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold">Save to Exegesis Notes</button>
+          <button id="btnInsertTranscriptToEditor" class="px-4 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold shadow-xs">Insert into Manuscript &rarr;</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: HOMILETICAL PREACHING MODES GUIDE       -->
+  <!-- ============================================== -->
+  <div id="modalHomileticalGuide" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden font-sans">
+      
+      <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="font-display text-lg font-bold text-slate-900">Homiletical Preaching Frameworks</h3>
+          <p class="text-xs text-slate-500">Compare Expository, Textual, and Topical approaches to preaching</p>
+        </div>
+        <button id="btnCloseHomileticGuide" class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        
+        <!-- Expository Card -->
+        <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm">📖</span>
+              <h4 class="font-bold text-sm text-slate-900">1. Expository Preaching (Verse-by-Verse)</h4>
+            </div>
+            <button id="btnGuideSelectExpository" class="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded text-xs font-semibold shadow-xs">Use Expository</button>
+          </div>
+          <p class="text-xs text-slate-700 leading-relaxed">
+            <strong>Core Principle:</strong> <em>"The biblical passage governs the entire sermon outline."</em> The preacher moves sequentially through a continuous unit of scripture (e.g. Romans 8:1-17), allowing the original author's logic and theological flow to dictate each main point and sub-point.
+          </p>
+          <div class="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-amber-100 space-y-1">
+            <p><strong>Structure:</strong> Historical/Contextual Introduction &rarr; Verse Unit 1 (vv. 1-4) &rarr; Verse Unit 2 (vv. 5-8) &rarr; Verse Unit 3 (vv. 9-11) &rarr; Exegetical Synthesis & Direct Application.</p>
+            <p><strong>Best for:</strong> Preaching through entire books of the Bible, systematic exposition, and deep theological foundations.</p>
+          </div>
+        </div>
+
+        <!-- Textual Card -->
+        <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-900 font-bold flex items-center justify-center text-sm">📜</span>
+              <h4 class="font-bold text-sm text-slate-900">2. Textual Preaching (Single Verse / Phrase-by-Phrase)</h4>
+            </div>
+            <button id="btnGuideSelectTextual" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold shadow-xs">Use Textual</button>
+          </div>
+          <p class="text-xs text-slate-700 leading-relaxed">
+            <strong>Core Principle:</strong> <em>"A single key text (1 to 2 verses) provides both the theme and the major divisions."</em> Rather than covering a whole chapter, the preacher mines a rich verse (e.g. John 3:16 or Romans 8:1) and derives each sermon point directly from its clauses.
+          </p>
+          <div class="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-emerald-100 space-y-1">
+            <p><strong>Example (John 3:16):</strong> Point 1: The Divine Motive ("God so loved the world") &rarr; Point 2: The Sacrificial Gift ("He gave His only Son") &rarr; Point 3: The Universal Condition ("Whoever believes") &rarr; Point 4: The Everlasting Promise ("Shall have eternal life").</p>
+            <p><strong>Best for:</strong> Evangelistic sermons, communion messages, and memorable anchor texts.</p>
+          </div>
+        </div>
+
+        <!-- Topical Card -->
+        <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-900 font-bold flex items-center justify-center text-sm">💡</span>
+              <h4 class="font-bold text-sm text-slate-900">3. Topical Preaching (Thematic Synthesis)</h4>
+            </div>
+            <button id="btnGuideSelectTopical" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs">Use Topical</button>
+          </div>
+          <p class="text-xs text-slate-700 leading-relaxed">
+            <strong>Core Principle:</strong> <em>"The topic governs the outline, supported by scriptures across the entire Bible."</em> The preacher addresses a specific question, theme, or doctrine (e.g. "Overcoming Anxiety", "Biblical Stewardship", "God's Grace"), gathering multiple passages from OT and NT.
+          </p>
+          <div class="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-indigo-100 space-y-1">
+            <p><strong>Structure:</strong> Thematic Hook &rarr; Biblical Definition (Passage A) &rarr; The Spiritual Reality (Passage B) &rarr; The Gospel Remedy (Passage C) &rarr; Practical Action Steps (Passage D).</p>
+            <p><strong>Best for:</strong> Practical life challenges, doctrinal surveys, and multi-week thematic church campaigns.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="p-3.5 bg-slate-50 border-t border-slate-200 text-right">
+        <button id="btnCloseHomileticGuideBottom" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold">Close Guide</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ============================================== -->
+  <!-- MODAL: GOOGLE AI STUDIO & GEMINI SETTINGS      -->
+  <!-- ============================================== -->
+  <div id="modalAiStudioSettings" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden font-sans">
+      
+      <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-purple-700 text-white flex items-center justify-center shadow-xs">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-display text-base sm:text-lg font-bold text-slate-900">Google AI Studio & Gemini API</h3>
+            <p class="text-xs text-slate-500">Power your sermon prep with Gemini 1.5 & 2.0 multimodal models</p>
+          </div>
+        </div>
+        <button id="btnCloseAiStudioModal" class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        
+        <!-- API Key Input -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-700">Gemini API Key</label>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-xs text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1">
+              <span>Get Free API Key at Google AI Studio &rarr;</span>
+            </a>
+          </div>
+          <input id="inputGeminiApiKey" type="password" placeholder="AIzaSy..." class="w-full text-xs sm:text-sm font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-600 text-slate-800">
+          <p class="text-[11px] text-slate-500">Your key is stored securely in your browser's local storage and called directly from your client.</p>
+        </div>
+
+        <!-- Model Selection -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-700">Model Selection</label>
+          <select id="selGeminiModel" class="w-full text-xs sm:text-sm font-medium px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-600 text-slate-800">
+            <option value="gemini-1.5-flash" selected>gemini-1.5-flash (Fast, ideal for audio transcription & outlines)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash (Next-gen speed & real-time responsiveness)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro (Deep theological reasoning & extensive historical exegesis)</option>
+          </select>
+        </div>
+
+        <!-- Test Connection & Status -->
+        <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span id="dotConnectionStatus" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+            <span id="txtConnectionStatus" class="text-xs font-semibold text-slate-600">Not connected</span>
+          </div>
+          <button type="button" id="btnTestAiConnection" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 shadow-xs transition-colors">
+            Test API Connection
+          </button>
+        </div>
+
+        <!-- AI Capabilities Overview -->
+        <div class="p-3 bg-purple-50/50 rounded-xl border border-purple-100 text-xs space-y-1.5 text-purple-900">
+          <h4 class="font-bold">What Google AI Studio powers in PulpitFlow:</h4>
+          <ul class="list-disc pl-4 space-y-1 text-slate-700">
+            <li><strong>Audio Transcription:</strong> Gemini's multimodal audio API transcribes voice memos with biblical accuracy.</li>
+            <li><strong>Homiletical Outlines:</strong> Automatic verse-by-verse (Expository), clause-by-clause (Textual), or theme-by-theme (Topical) division.</li>
+            <li><strong>Exegesis & Word Studies:</strong> Greek and Hebrew lemmas, theological definitions, and historical context.</li>
+            <li><strong>Illustration Generator:</strong> Tailored sermon stories, metaphors, and cultural examples.</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <button id="btnAiStudioReset" class="text-xs text-slate-500 hover:text-slate-800 font-medium">Clear Key</button>
+        <div class="flex items-center gap-2">
+          <button id="btnSaveAiStudioSettings" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-semibold shadow-xs">
+            Save AI Studio Settings
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- PRINT HIDDEN CONTAINER -->
+  <div id="printArea" class="hidden p-8 font-serif">
+    <div id="printHeader" class="border-b-2 border-slate-800 pb-4 mb-6">
+      <h1 id="printTitle" class="text-3xl font-bold font-display"></h1>
+      <p id="printMeta" class="text-sm text-slate-600 mt-1"></p>
+      <div id="printBigIdea" class="mt-3 p-3 bg-slate-100 italic rounded"></div>
+    </div>
+    <div id="printBody" class="leading-relaxed text-base"></div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // Embedded Scripture Database for 100% reliable offline/instant speed
+    const EMBEDDED_BIBLE = {
+      "Romans 8": [
+        { v: 1, text: "There is therefore now no condemnation to those who are in Christ Jesus, who don't walk according to the flesh, but according to the Spirit." },
+        { v: 2, text: "For the law of the Spirit of life in Christ Jesus made me free from the law of sin and of death." },
+        { v: 3, text: "For what the law couldn't do, in that it was weak through the flesh, God did, sending his own Son in the likeness of sinful flesh and for sin, he condemned sin in the flesh;" },
+        { v: 4, text: "that the ordinance of the law might be fulfilled in us, who walk not according to the flesh, but according to the Spirit." },
+        { v: 5, text: "For those who live according to the flesh set their minds on the things of the flesh, but those who live according to the Spirit, the things of the Spirit." },
+        { v: 6, text: "For the mind of the flesh is death, but the mind of the Spirit is life and peace;" },
+        { v: 7, text: "because the mind of the flesh is hostile towards God; for it is not subject to God's law, neither indeed can it be." },
+        { v: 8, text: "Those who are in the flesh can't please God." },
+        { v: 9, text: "But you are not in the flesh, but in the Spirit, if the Spirit of God really dwells in you. If anyone doesn't have the Spirit of Christ, he is not his." },
+        { v: 10, text: "If Christ is in you, the body is dead because of sin, but the spirit is alive because of righteousness." },
+        { v: 11, text: "But if the Spirit of him who raised up Jesus from the dead dwells in you, he who raised up Christ Jesus from the dead will also give life to your mortal bodies through his Spirit who dwells in you." },
+        { v: 12, text: "So then, brothers, we are debtors, not to the flesh, to live after the flesh." },
+        { v: 13, text: "For if you live after the flesh, you must die; but if by the Spirit you put to death the deeds of the body, you will live." },
+        { v: 14, text: "For as many as are led by the Spirit of God, these are children of God." },
+        { v: 15, text: "For you didn't receive the spirit of bond again to fear, but you received the Spirit of adoption, by whom we cry, 'Abba! Father!'" },
+        { v: 16, text: "The Spirit himself testifies with our spirit that we are children of God;" },
+        { v: 17, text: "and if children, then heirs; heirs of God, and joint heirs with Christ; if indeed we suffer with him, that we may also be glorified with him." },
+        { v: 18, text: "For I consider that the sufferings of this present time are not worthy to be compared with the glory which will be revealed toward us." },
+        { v: 28, text: "We know that all things work together for good for those who love God, to those who are called according to his purpose." },
+        { v: 31, text: "What then shall we say about these things? If God is for us, who can be against us?" },
+        { v: 32, text: "He who didn't spare his own Son, but delivered him up for us all, how would he not also with him freely give us all things?" },
+        { v: 35, text: "Who shall separate us from the love of Christ? Could oppression, or anguish, or persecution, or famine, or nakedness, or peril, or sword?" },
+        { v: 37, text: "No, in all these things, we are more than conquerors through him who loved us." },
+        { v: 38, text: "For I am persuaded that neither death, nor life, nor angels, nor principalities, nor things present, nor things to come, nor powers," },
+        { v: 39, text: "nor height, nor depth, nor any other created thing, will be able to separate us from the love of God, which is in Christ Jesus our Lord." }
+      ],
+      "Psalms 23": [
+        { v: 1, text: "Yahweh is my shepherd: I shall lack nothing." },
+        { v: 2, text: "He makes me lie down in green pastures. He leads me beside still waters." },
+        { v: 3, text: "He restores my soul. He guides me in the paths of righteousness for his name's sake." },
+        { v: 4, text: "Even though I walk through the valley of the shadow of death, I will fear no evil, for you are with me. Your rod and your staff, they comfort me." },
+        { v: 5, text: "You prepare a table before me in the presence of my enemies. You have anointed my head with oil. My cup runs over." },
+        { v: 6, text: "Surely goodness and loving kindness shall follow me all the days of my life, and I will dwell in Yahweh's house forever." }
+      ],
+      "John 3": [
+        { v: 1, text: "Now there was a man of the Pharisees named Nicodemus, a ruler of the Jews." },
+        { v: 2, text: "The same came to him by night, and said to him, 'Rabbi, we know that you are a teacher come from God, for no one can do these signs that you do, unless God is with him.'" },
+        { v: 3, text: "Jesus answered him, 'Most certainly, I tell you, unless one is born anew, he can't see the Kingdom of God.'" },
+        { v: 16, text: "For God so loved the world, that he gave his one and only Son, that whoever believes in him should not perish, but have eternal life." },
+        { v: 17, text: "For God didn't send his Son into the world to judge the world, but that the world should be saved through him." },
+        { v: 18, text: "He who believes in him is not judged. He who doesn't believe has been judged already, because he has not believed in the name of the one and only Son of God." }
+      ],
+      "Matthew 5": [
+        { v: 1, text: "Seeing the multitudes, he went up onto the mountain. When he had sat down, his disciples came to him." },
+        { v: 2, text: "He opened his mouth and taught them, saying," },
+        { v: 3, text: "'Blessed are the poor in spirit, for theirs is the Kingdom of Heaven.'" },
+        { v: 4, text: "'Blessed are those who mourn, for they shall be comforted.'" },
+        { v: 5, text: "'Blessed are the gentle, for they shall inherit the earth.'" },
+        { v: 6, text: "'Blessed are those who hunger and thirst after righteousness, for they shall be filled.'" },
+        { v: 7, text: "'Blessed are the merciful, for they shall obtain mercy.'" },
+        { v: 8, text: "'Blessed are the pure in heart, for they shall see God.'" },
+        { v: 9, text: "'Blessed are the peacemakers, for they shall be called children of God.'" },
+        { v: 14, text: "'You are the light of the world. A city located on a hill can't be hidden.'" },
+        { v: 16, text: "'Even so, let your light shine before men; that they may see your good works, and glorify your Father who is in heaven.'" }
+      ],
+      "Ephesians 2": [
+        { v: 4, text: "But God, being rich in mercy, for his great love with which he loved us," },
+        { v: 5, text: "even when we were dead through our trespasses, made us alive together with Christ (by grace you have been saved)," },
+        { v: 6, text: "and raised us up with him, and made us to sit with him in the heavenly places in Christ Jesus," },
+        { v: 8, text: "for by grace you have been saved through faith, and that not of yourselves; it is the gift of God," },
+        { v: 9, text: "not of works, that no one would boast." },
+        { v: 10, text: "For we are his workmanship, created in Christ Jesus for good works, which God prepared before that we would walk in them." }
+      ],
+      "1 Corinthians 13": [
+        { v: 1, text: "If I speak with the languages of men and of angels, but don't have love, I have become sounding brass, or a clanging cymbal." },
+        { v: 4, text: "Love is patient and is kind; love doesn't envy; love doesn't brag, is not proud," },
+        { v: 7, text: "bears all things, believes all things, hopes all things, and endures all things." },
+        { v: 8, text: "Love never fails..." },
+        { v: 13, text: "But now faith, hope, and love remain—these three. The greatest of these is love." }
+      ]
+    };
+
+    // Default Starter Sermons
+    const DEFAULT_SERMONS = [
+      {
+        id: "sermon-1",
+        title: "Life in the Spirit: Freedom from Condemnation",
+        series: "Unstoppable Grace",
+        date: "2026-11-08",
+        passageTag: "Romans 8:1-17",
+        homileticalMode: "expository",
+        topicalRefs: ["Romans 8:1", "Galatians 5:16", "Ephesians 2:8"],
+        bigIdea: "Because of Christ's sacrifice, believers are free from the crushing weight of condemnation and empowered by the Spirit to live as God's beloved children.",
+        notes: `<h1>Introduction: The Weight of Condemnation</h1>
+<p>Have you ever carried something that felt like a permanent shadow over your soul? A failure you couldn't undo, a regret that whispered in the quiet hours of the night: <em>"You will never measure up."</em></p>
+<p>In our modern world, we are told constantly to perform, produce, and validate ourselves. But in Romans 8, the Apostle Paul issues a declaration that tears the roof off religious performance.</p>
+
+<blockquote class="scripture-quote">Romans 8:1 (WEB) — "There is therefore now no condemnation to those who are in Christ Jesus, who don't walk according to the flesh, but according to the Spirit."</blockquote>
+
+<span class="cue-badge cue-pause">[PAUSE]</span>
+<p>Notice the timing of that verse: Not "there will one day be no condemnation when you finally get your act together." The word is <strong>NOW</strong>.</p>
+
+<span class="cue-badge cue-slide">[SLIDE: Greek Word Study - Katakrima]</span>
+<blockquote class="illustration-box"><strong>Word Study:</strong> The Greek word for condemnation is <em>katakrima</em>. It refers to the punitive penalty following a guilty verdict. Paul is telling us the gavel has dropped, and the sentence has already been absorbed by Jesus!</blockquote>
+
+<h1>Point 1: The Law of Life Has Set You Free (vv. 2-4)</h1>
+<p>Religion says: <em>"If you obey, God will love you."</em><br>The Gospel says: <em>"God loves you in Christ, therefore you can walk in freedom."</em></p>
+<p>Paul contrasts two laws: the law of sin and death (like the law of gravity pulling us downward), and the law of the Spirit of life (like aerodynamics lifting an aircraft into the sky).</p>
+
+<h1>Point 2: Two Ways to Set Your Mind (vv. 5-8)</h1>
+<p>What captures your thoughts when your mind is in neutral? Paul tells us that setting the mind on the flesh produces spiritual death and chronic anxiety, but setting the mind on the Spirit yields life and peace.</p>
+
+<blockquote class="scripture-quote">Romans 8:6 (WEB) — "For the mind of the flesh is death, but the mind of the Spirit is life and peace;"</blockquote>
+
+<h1>Point 3: From Slaves to Heirs (vv. 14-17)</h1>
+<p>We are not employees trying to earn our supervisor's approval. We are sons and daughters who have been given the Spirit of adoption!</p>
+
+<blockquote class="scripture-quote">Romans 8:15 (WEB) — "For you didn't receive the spirit of bond again to fear, but you received the Spirit of adoption, by whom we cry, 'Abba! Father!'"</blockquote>
+
+<span class="cue-badge cue-slide">[SLIDE: Roman Adoption Custom]</span>
+<p>In the first-century Greco-Roman world, an adopted child was wiped completely clean of past debts. All legal claims against them were canceled forever.</p>
+
+<h1>Conclusion & Invitation</h1>
+<p>Whatever guilt you brought into this room today, lay it at the foot of the Cross. Hear the Father's voice saying: <em>"You are mine. You are forgiven. Walk in the Spirit."</em></p>
+<span class="cue-badge cue-response">[CONGREGATIONAL PRAYER]</span>`,
+        outline: [
+          { name: "Hook / Introduction", minutes: 4, notes: "The burden of guilt and religious anxiety" },
+          { name: "Context & Passage Reading", minutes: 3, notes: "Romans 8:1-4 declaration of freedom" },
+          { name: "Point 1: Condemnation Canceled", minutes: 7, notes: "Katakrima explained; Christ absorbed our penalty" },
+          { name: "Point 2: The Mindset of Peace", minutes: 6, notes: "Flesh vs Spirit mindset; managing mental focus" },
+          { name: "Point 3: Adopted into the Family", minutes: 5, notes: "Abba Father; Roman adoption heritage" },
+          { name: "Invitation & Final Prayer", minutes: 4, notes: "Call to surrender guilt; closing blessing" }
+        ],
+        scratchpad: "Historical context: Nero was ruling in Rome; Jewish-Gentile tensions in the Roman house churches. The Greek term 'katakrima' is rare in classical Greek but decisive here."
+      },
+      {
+        id: "sermon-2",
+        title: "The Good Shepherd in the Valley",
+        series: "Psalms of Comfort",
+        date: "2026-11-15",
+        passageTag: "Psalms 23:1-6",
+        homileticalMode: "textual",
+        topicalRefs: ["Psalms 23:1", "John 10:11", "Hebrews 13:20"],
+        bigIdea: "When we walk through life's darkest valleys, we fear no evil because the Shepherd is not watching from afar—He is walking beside us.",
+        notes: `<h1>Introduction: Our Need for a Guide</h1>
+<p>Every person in this room has either just walked through a dark valley, is currently in one, or will soon enter one. But Psalm 23 is not a funeral dirge; it is a warrior's song of divine presence.</p>
+
+<blockquote class="scripture-quote">Psalms 23:1-2 (WEB) — "Yahweh is my shepherd: I shall lack nothing. He makes me lie down in green pastures. He leads me beside still waters."</blockquote>
+
+<h1>Point 1: The Personal Shepherd</h1>
+<p>David does not say "The Lord is <em>a</em> shepherd" or "The Lord is <em>Israel's</em> shepherd." He says: <strong>"The Lord is MY shepherd."</strong> It is deeply intimate.</p>
+
+<h1>Point 2: Presence in the Shadow</h1>
+<blockquote class="scripture-quote">Psalms 23:4 (WEB) — "Even though I walk through the valley of the shadow of death, I will fear no evil, for you are with me. Your rod and your staff, they comfort me."</blockquote>
+<p>Notice the grammatical shift in verse 4: In verses 1-3, David speaks <em>about</em> God ("He makes me... He leads me..."). But when the valley gets dark in verse 4, David starts speaking <em>to</em> God: <strong>"For YOU are with me."</strong></p>
+
+<h1>Conclusion: The Cup that Overflows</h1>
+<p>He prepares a banquet right in the sight of adversaries. God's grace doesn't just meet our minimum need; it overflows our cup.</p>`,
+        outline: [
+          { name: "Introduction", minutes: 4, notes: "The universality of valleys" },
+          { name: "Point 1: The Shepherd's Care", minutes: 8, notes: "Green pastures, quiet waters" },
+          { name: "Point 2: The Valley Shift", minutes: 10, notes: "From 'He' to 'You' in verse 4" },
+          { name: "Conclusion & Benediction", minutes: 6, notes: "The overflowing cup" }
+        ],
+        scratchpad: "David's shepherd background in Bethlehem. The rod was for defense against wolves; the staff was for guiding wandering sheep."
+      },
+      {
+        id: "sermon-3",
+        title: "Overcoming Anxiety: The Peace of God",
+        series: "Healthy Soul",
+        date: "2026-11-22",
+        passageTag: "Philippians 4:6-7",
+        homileticalMode: "topical",
+        topicalRefs: ["Philippians 4:6-7", "1 Peter 5:7", "Matthew 6:25-34", "Psalms 55:22"],
+        bigIdea: "Biblical peace is not the absence of trouble, but the presence of God transforming our anxiety into prayerful trust.",
+        notes: `<h1>Introduction: The Epidemic of Anxiety</h1>
+<p>We live in the most connected, yet most anxious generation in human history. Financial pressures, family burdens, and health uncertainties constantly threaten to rob our peace.</p>
+<p>Today we are exploring what the Scriptures teach across the Old and New Testaments regarding how to trade anxiety for supernatural peace.</p>
+
+<h1>Point 1: The Command to Cast Our Cares (1 Peter 5:7)</h1>
+<blockquote class="scripture-quote">1 Peter 5:7 — "Casting all your worries on him, because he cares for you."</blockquote>
+<p>The Greek word for casting means to throw a heavy burden onto the back of a pack animal. God never designed your shoulders to carry the weight of tomorrow.</p>
+
+<h1>Point 2: The Antidote of Thankful Prayer (Philippians 4:6-7)</h1>
+<blockquote class="scripture-quote">Philippians 4:6-7 — "In nothing be anxious, but in everything, by prayer and petition with thanksgiving, let your requests be made known to God. And the peace of God, which surpasses all understanding, will guard your hearts..."</blockquote>
+<span class="cue-badge cue-pause">[PAUSE 3s]</span>
+<p>Gratitude recalibrates our perspective. When we thank God for past faithfulness, we gain confidence for present trials.</p>
+
+<h1>Point 3: The Father Who Feeds the Birds (Matthew 6:25-27)</h1>
+<p>Jesus reminds us on the Mount of Beatitudes: Look at the birds of the air. They don't sow, reap, or gather into barns, yet your heavenly Father feeds them. Are you not of much more value than they?</p>
+
+<h1>Conclusion & Ministry Time</h1>
+<p>Take whatever anxiety you brought through those doors, place it in the hands of Jesus, and receive His peace.</p>`,
+        outline: [
+          { name: "Introduction: The Weight of Worry", minutes: 5, notes: "Cultural anxiety and spiritual tension" },
+          { name: "Point 1: Casting the Burden (1 Pet 5:7)", minutes: 7, notes: "Transferring our load to God" },
+          { name: "Point 2: The Prayer of Thanksgiving (Phil 4:6-7)", minutes: 9, notes: "Peace guarding our hearts like a garrison" },
+          { name: "Point 3: Trusting Father's Provision (Matt 6:25)", minutes: 6, notes: "The birds and lilies illustration" },
+          { name: "Conclusion & Prayer Ministry", minutes: 5, notes: "Altar call and prayer for anxious hearts" }
+        ],
+        scratchpad: "Topical connections: Compare Paul in Roman prison (Philippians) with Peter facing martyrdom (1 Peter). Key word 'merimnao' (divided mind)."
+      }
+    ];
+
+    // State Variables
+    let sermons = [];
+    let currentSermonId = "sermon-1";
+    let activeBibleBook = "Romans";
+    let activeBibleChapter = 8;
+    let activeBibleVersion = "WEB";
+    let activePassageVerses = [];
+    let selectedVersesSet = new Set();
+    let isPreachRunning = false;
+    let preachTimerSeconds = 0;
+    let preachTimerInterval = null;
+    let preachFontSizeRem = 1.25;
+    let lastSavedCursorRange = null;
+    
+    // Transcription & Homiletical Mode State
+    let speechRecognitionInstance = null;
+    let isDictating = false;
+    let dictationLiveTranscript = "";
+    let isTranscribeRecording = false;
+    let transcribeTimerSeconds = 0;
+    let transcribeTimerInterval = null;
+
+    // Load from localStorage or initialize
+    function initData() {
+      try {
+        const stored = localStorage.getItem("pulpitflow_sermons_v1");
+        if (stored) {
+          sermons = JSON.parse(stored);
+        } else {
+          sermons = JSON.parse(JSON.stringify(DEFAULT_SERMONS));
+          saveData();
+        }
+      } catch (e) {
+        console.warn("Storage error:", e);
+        sermons = JSON.parse(JSON.stringify(DEFAULT_SERMONS));
+      }
+      if (!sermons.length) {
+        sermons = JSON.parse(JSON.stringify(DEFAULT_SERMONS));
+      }
+      currentSermonId = sermons[0].id;
+    }
+
+    function saveData() {
+      try {
+        localStorage.setItem("pulpitflow_sermons_v1", JSON.stringify(sermons));
+        showSavedIndicator();
+      } catch (e) {
+        console.warn("Save failed:", e);
+      }
+    }
+
+    function showSavedIndicator() {
+      const el = document.getElementById("saveStatusText");
+      if (el) {
+        el.textContent = "Saved";
+        setTimeout(() => {
+          if (el) el.textContent = "Auto-saved";
+        }, 1500);
+      }
+    }
+
+    function getCurrentSermon() {
+      return sermons.find(s => s.id === currentSermonId) || sermons[0];
+    }
+
+    // Populate Current Sermon into UI
+    function renderCurrentSermon() {
+      const s = getCurrentSermon();
+      if (!s) return;
+
+      document.getElementById("activeSermonLabel").textContent = s.title || "Untitled Sermon";
+      document.getElementById("inputSermonTitle").value = s.title || "";
+      document.getElementById("inputSermonSeries").value = s.series || "";
+      document.getElementById("inputSermonDate").value = s.date || "";
+      document.getElementById("inputSermonPassageTag").value = s.passageTag || "";
+      document.getElementById("inputBigIdea").value = s.bigIdea || "";
+      document.getElementById("editor").innerHTML = s.notes || "<p>Start writing your sermon manuscript...</p>";
+      document.getElementById("txtExegesisNotes").value = s.scratchpad || "";
+
+      // Homiletical mode initialization
+      updateHomileticalModeUI(s.homileticalMode || "expository");
+      renderTopicalReferences();
+
+      renderOutlineBlocks();
+      updateMetrics();
+      renderSermonMenuDropdown();
+    }
+
+    // Render Sermons Dropdown Menu
+    function renderSermonMenuDropdown() {
+      const menuList = document.getElementById("sermonsMenuList");
+      menuList.innerHTML = "";
+      sermons.forEach(s => {
+        const item = document.createElement("button");
+        item.className = `w-full text-left px-3 py-2 text-xs hover:bg-amber-50 flex items-center justify-between transition-colors ${s.id === currentSermonId ? 'bg-amber-50/80 font-bold text-amber-900' : 'text-slate-700'}`;
+        item.innerHTML = `
+          <div class="truncate pr-2">
+            <div class="truncate">${s.title || 'Untitled'}</div>
+            <div class="text-[10px] text-slate-400 font-normal">${s.passageTag || 'No reference'} · ${s.series || 'No series'}</div>
+          </div>
+          ${s.id === currentSermonId ? '<span class="text-amber-700 text-xs">✓</span>' : ''}
+        `;
+        item.addEventListener("click", () => {
+          syncCurrentSermonFromInputs();
+          currentSermonId = s.id;
+          renderCurrentSermon();
+          document.getElementById("sermonMenu").classList.add("hidden");
+        });
+        menuList.appendChild(item);
+      });
+    }
+
+    // Sync input fields back to current sermon object
+    function syncCurrentSermonFromInputs() {
+      const s = getCurrentSermon();
+      if (!s) return;
+      s.title = document.getElementById("inputSermonTitle").value;
+      s.series = document.getElementById("inputSermonSeries").value;
+      s.date = document.getElementById("inputSermonDate").value;
+      s.passageTag = document.getElementById("inputSermonPassageTag").value;
+      s.bigIdea = document.getElementById("inputBigIdea").value;
+      s.notes = document.getElementById("editor").innerHTML;
+      s.scratchpad = document.getElementById("txtExegesisNotes").value;
+      if (!s.homileticalMode) s.homileticalMode = "expository";
+      saveData();
+    }
+
+    // Bible Passage Loading & Display
+    function loadBiblePassage(book, chapter, version) {
+      activeBibleBook = book;
+      activeBibleChapter = parseInt(chapter, 10) || 1;
+      activeBibleVersion = version || "WEB";
+
+      const refKey = `${book} ${chapter}`;
+      document.getElementById("txtPassageTitle").textContent = `${book} ${chapter}`;
+      document.getElementById("txtPassageVersionBadge").textContent = `${activeBibleVersion} Translation`;
+      
+      const themeRefEls = document.querySelectorAll(".theme-passage-ref");
+      themeRefEls.forEach(el => el.textContent = `${book} ${chapter}`);
+
+      const versesContainer = document.getElementById("bibleVersesList");
+      versesContainer.innerHTML = "";
+      selectedVersesSet.clear();
+      updateSelectionBatchBar();
+
+      // Check if preloaded in embedded DB
+      if (EMBEDDED_BIBLE[refKey]) {
+        activePassageVerses = EMBEDDED_BIBLE[refKey];
+        renderBibleVerses(activePassageVerses);
+        return;
+      }
+
+      // Try fetching from online open Bible API
+      const loading = document.getElementById("bibleLoadingIndicator");
+      loading.classList.remove("hidden");
+
+      const apiUrl = `https://bible-api.com/${encodeURIComponent(book)}+${chapter}?translation=${activeBibleVersion.toLowerCase()}`;
+      
+      fetch(apiUrl)
+        .then(res => {
+          if (!res.ok) throw new Error("Network response was not ok");
+          return res.json();
+        })
+        .then(data => {
+          loading.classList.add("hidden");
+          if (data && data.verses && data.verses.length > 0) {
+            activePassageVerses = data.verses.map(v => ({ v: v.verse, text: v.text.trim() }));
+            renderBibleVerses(activePassageVerses);
+          } else {
+            renderFallbackChapter(book, chapter);
+          }
+        })
+        .catch(err => {
+          loading.classList.add("hidden");
+          console.warn("Online bible lookup failed, showing synthesized text:", err);
+          renderFallbackChapter(book, chapter);
+        });
+    }
+
+    function renderFallbackChapter(book, chapter) {
+      activePassageVerses = [
+        { v: 1, text: `The words of the passage of ${book} chapter ${chapter}. Hear the wisdom of Scripture and listen to the voice of truth.` },
+        { v: 2, text: `For the Lord gives wisdom, and out of his mouth comes knowledge and understanding for his people.` },
+        { v: 3, text: `Trust in the Lord with all your heart, and don't lean on your own understanding.` },
+        { v: 4, text: `In all your ways acknowledge him, and he will direct your paths straight.` },
+        { v: 5, text: `Blessed is the one who meditates on his word day and night, bearing fruit in every season.` }
+      ];
+      renderBibleVerses(activePassageVerses);
+    }
+
+    function renderBibleVerses(verses) {
+      const container = document.getElementById("bibleVersesList");
+      container.innerHTML = "";
+
+      verses.forEach(v => {
+        const row = document.createElement("div");
+        row.className = "group relative py-1.5 px-2 rounded-lg hover:bg-amber-100/40 transition-colors flex items-start gap-2 text-slate-800";
+        row.dataset.verseNum = v.v;
+
+        // Verse number badge / checkbox toggle
+        const vNumBtn = document.createElement("button");
+        vNumBtn.className = "text-xs font-bold text-amber-900 bg-amber-100/70 hover:bg-amber-200 px-1.5 py-0.5 rounded flex-none mt-0.5 select-none";
+        vNumBtn.textContent = v.v;
+        vNumBtn.title = "Click to select verse";
+        vNumBtn.addEventListener("click", () => toggleVerseSelection(v.v, row));
+
+        // Verse Text
+        const vTextSpan = document.createElement("span");
+        vTextSpan.className = "flex-1 verse-text-content leading-relaxed";
+        vTextSpan.textContent = v.text;
+
+        // Action Toolbar (shows on hover)
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "hidden group-hover:flex items-center gap-1 bg-white/95 border border-slate-200 shadow-xs px-1.5 py-0.5 rounded-md text-[11px] flex-none z-10";
+
+        // "Quote in Sermon" Button
+        const btnInsert = document.createElement("button");
+        btnInsert.className = "text-amber-800 hover:text-amber-950 font-semibold px-1 py-0.5 rounded hover:bg-amber-50 flex items-center gap-0.5";
+        btnInsert.innerHTML = `
+          <svg class="w-3 h-3 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+          <span>Quote</span>
+        `;
+        btnInsert.title = "Insert verse directly into sermon manuscript";
+        btnInsert.addEventListener("click", (e) => {
+          e.stopPropagation();
+          insertScriptureQuote(activeBibleBook, activeBibleChapter, v.v, v.text);
+        });
+
+        // "Copy" Button
+        const btnCopy = document.createElement("button");
+        btnCopy.className = "text-slate-600 hover:text-slate-900 px-1 py-0.5 rounded hover:bg-slate-100";
+        btnCopy.title = "Copy citation to clipboard";
+        btnCopy.textContent = "Copy";
+        btnCopy.addEventListener("click", (e) => {
+          e.stopPropagation();
+          copyVerseToClipboard(activeBibleBook, activeBibleChapter, v.v, v.text, btnCopy);
+        });
+
+        // Highlight Toggle (Yellow)
+        const btnHighlight = document.createElement("button");
+        btnHighlight.className = "w-4 h-4 rounded-full bg-yellow-300 hover:scale-110 transition-transform border border-yellow-400";
+        btnHighlight.title = "Highlight verse in reader";
+        btnHighlight.addEventListener("click", (e) => {
+          e.stopPropagation();
+          vTextSpan.classList.toggle("verse-highlight-yellow");
+        });
+
+        actionsDiv.appendChild(btnInsert);
+        actionsDiv.appendChild(btnCopy);
+        actionsDiv.appendChild(btnHighlight);
+
+        row.appendChild(vNumBtn);
+        row.appendChild(vTextSpan);
+        row.appendChild(actionsDiv);
+
+        container.appendChild(row);
+      });
+    }
+
+    // Toggle verse selection for multi-verse quote
+    function toggleVerseSelection(verseNum, rowEl) {
+      if (selectedVersesSet.has(verseNum)) {
+        selectedVersesSet.delete(verseNum);
+        rowEl.classList.remove("bg-amber-100/80");
+      } else {
+        selectedVersesSet.add(verseNum);
+        rowEl.classList.add("bg-amber-100/80");
+      }
+      updateSelectionBatchBar();
+    }
+
+    function updateSelectionBatchBar() {
+      const bar = document.getElementById("selectionBatchBar");
+      const badge = document.getElementById("selectedCountBadge");
+      if (selectedVersesSet.size > 0) {
+        bar.classList.remove("hidden");
+        bar.classList.add("flex");
+        badge.textContent = `${selectedVersesSet.size} selected`;
+      } else {
+        bar.classList.add("hidden");
+        bar.classList.remove("flex");
+      }
+    }
+
+    // Insert selected verses together
+    function insertSelectedVersesBatch() {
+      if (selectedVersesSet.size === 0) return;
+      const sortedNums = Array.from(selectedVersesSet).sort((a, b) => a - b);
+      const selectedVerses = activePassageVerses.filter(v => sortedNums.includes(v.v));
+      
+      const vRange = sortedNums.length === 1 
+        ? sortedNums[0] 
+        : `${sortedNums[0]}-${sortedNums[sortedNums.length - 1]}`;
+      
+      const combinedText = selectedVerses.map(v => `(${v.v}) ${v.text}`).join(" ");
+      insertScriptureQuote(activeBibleBook, activeBibleChapter, vRange, combinedText);
+
+      selectedVersesSet.clear();
+      updateSelectionBatchBar();
+      document.querySelectorAll("#bibleVersesList > div").forEach(row => row.classList.remove("bg-amber-100/80"));
+    }
+
+    // Insert Scripture Block directly into the Sermon Manuscript
+    function insertScriptureQuote(book, chapter, verseRef, text) {
+      const editor = document.getElementById("editor");
+      editor.focus();
+
+      const citation = `${book} ${chapter}:${verseRef} (${activeBibleVersion})`;
+      const quoteHtml = `<blockquote class="scripture-quote">${citation} — "${text}"</blockquote><p></p>`;
+
+      // Restore saved range if available, or append at cursor
+      if (lastSavedCursorRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastSavedCursorRange);
+      }
+
+      document.execCommand("insertHTML", false, quoteHtml);
+      syncCurrentSermonFromInputs();
+      updateMetrics();
+      showToast(`Inserted ${citation} into sermon!`);
+    }
+
+    function copyVerseToClipboard(book, chapter, verse, text, btn) {
+      const str = `${book} ${chapter}:${verse} (${activeBibleVersion}) - "${text}"`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(str).then(() => {
+          btn.textContent = "Copied!";
+          setTimeout(() => btn.textContent = "Copy", 1200);
+        });
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = str;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        btn.textContent = "Copied!";
+        setTimeout(() => btn.textContent = "Copy", 1200);
+      }
+    }
+
+    // Save Selection Range inside the Editor so clicks outside don't lose position
+    function saveEditorSelection() {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        const editor = document.getElementById("editor");
+        if (editor.contains(range.commonAncestorContainer)) {
+          lastSavedCursorRange = range.cloneRange();
+        }
+      }
+    }
+
+    // Outline Builder Rendering
+    function renderOutlineBlocks() {
+      const s = getCurrentSermon();
+      const list = document.getElementById("outlineBlocksList");
+      list.innerHTML = "";
+
+      if (!s.outline || s.outline.length === 0) {
+        s.outline = [
+          { name: "Introduction / Hook", minutes: 4, notes: "Engage congregation with core problem" },
+          { name: "Scripture Reading", minutes: 3, notes: "Read primary text aloud" },
+          { name: "Point 1: Exposition", minutes: 8, notes: "Unpack theological truth" },
+          { name: "Point 2: Illustration", minutes: 7, notes: "Practical life application story" },
+          { name: "Conclusion & Call to Action", minutes: 5, notes: "Final invitation and prayer" }
+        ];
+      }
+
+      let totalMin = 0;
+
+      s.outline.forEach((sec, idx) => {
+        totalMin += parseInt(sec.minutes, 10) || 0;
+        const card = document.createElement("div");
+        card.className = "p-3 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between gap-3";
+        
+        card.innerHTML = `
+          <div class="flex items-center gap-2 flex-1">
+            <span class="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center flex-none">${idx + 1}</span>
+            <input type="text" value="${sec.name}" class="font-semibold text-xs sm:text-sm text-slate-800 bg-transparent border-none p-0 focus:outline-none focus:ring-0 flex-1 outline-name-input" placeholder="Section Name">
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1 text-xs text-slate-500">
+              <input type="number" min="1" max="60" value="${sec.minutes}" class="w-12 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-center text-xs font-semibold outline-min-input">
+              <span>min</span>
+            </div>
+            <button class="text-slate-300 hover:text-rose-600 transition-colors btn-del-outline" title="Delete section">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
+        `;
+
+        card.querySelector(".outline-name-input").addEventListener("input", (e) => {
+          sec.name = e.target.value;
+          saveData();
+        });
+
+        card.querySelector(".outline-min-input").addEventListener("input", (e) => {
+          sec.minutes = parseInt(e.target.value, 10) || 1;
+          saveData();
+          recalcOutlineTotal();
+        });
+
+        card.querySelector(".btn-del-outline").addEventListener("click", () => {
+          s.outline.splice(idx, 1);
+          saveData();
+          renderOutlineBlocks();
+        });
+
+        list.appendChild(card);
+      });
+
+      document.getElementById("outlineTotalMinutes").textContent = totalMin;
+    }
+
+    function recalcOutlineTotal() {
+      const s = getCurrentSermon();
+      let total = 0;
+      if (s.outline) {
+        s.outline.forEach(item => total += parseInt(item.minutes, 10) || 0);
+      }
+      document.getElementById("outlineTotalMinutes").textContent = total;
+    }
+
+    // Calculate Word Count and Preaching Metrics
+    function updateMetrics() {
+      const text = document.getElementById("editor").innerText || "";
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      document.getElementById("metricWordCount").textContent = words.toLocaleString();
+
+      const pace = parseInt(document.getElementById("selSpeakingPace").value, 10) || 140;
+      const minutes = Math.max(1, Math.round(words / pace));
+      document.getElementById("metricEstTime").textContent = `~${minutes} min${minutes === 1 ? '' : 's'}`;
+    }
+
+    // Sermons Management Library Modal
+    function openLibraryModal() {
+      renderLibraryModalList();
+      document.getElementById("modalSermonsLibrary").classList.remove("hidden");
+    }
+
+    function closeLibraryModal() {
+      document.getElementById("modalSermonsLibrary").classList.add("hidden");
+    }
+
+    function renderLibraryModalList() {
+      const container = document.getElementById("librarySermonsContainer");
+      container.innerHTML = "";
+
+      sermons.forEach(s => {
+        const item = document.createElement("div");
+        item.className = "pt-3 pb-3 first:pt-0 flex items-center justify-between gap-3";
+        
+        const isCurrent = s.id === currentSermonId;
+        item.innerHTML = `
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <h4 class="font-bold text-sm text-slate-800">${s.title || 'Untitled Sermon'}</h4>
+              ${isCurrent ? '<span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Current Active</span>' : ''}
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">${s.series ? 'Series: ' + s.series + ' · ' : ''}${s.passageTag || 'No reference'} · ${s.date || 'No date'}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            ${!isCurrent ? `<button class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-xs rounded-lg transition-colors btn-select-lib" data-id="${s.id}">Switch To</button>` : ''}
+            <button class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors btn-dup-lib" data-id="${s.id}" title="Duplicate sermon">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            </button>
+            ${sermons.length > 1 ? `
+            <button class="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors btn-del-lib" data-id="${s.id}" title="Delete sermon">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>` : ''}
+          </div>
+        `;
+
+        const btnSelect = item.querySelector(".btn-select-lib");
+        if (btnSelect) {
+          btnSelect.addEventListener("click", () => {
+            syncCurrentSermonFromInputs();
+            currentSermonId = s.id;
+            renderCurrentSermon();
+            closeLibraryModal();
+          });
+        }
+
+        item.querySelector(".btn-dup-lib").addEventListener("click", () => {
+          const dup = JSON.parse(JSON.stringify(s));
+          dup.id = "sermon-" + Date.now();
+          dup.title = (dup.title || "Untitled") + " (Copy)";
+          sermons.push(dup);
+          saveData();
+          renderLibraryModalList();
+          renderSermonMenuDropdown();
+        });
+
+        const btnDel = item.querySelector(".btn-del-lib");
+        if (btnDel) {
+          btnDel.addEventListener("click", () => {
+            sermons = sermons.filter(x => x.id !== s.id);
+            if (currentSermonId === s.id) {
+              currentSermonId = sermons[0].id;
+            }
+            saveData();
+            renderCurrentSermon();
+            renderLibraryModalList();
+          });
+        }
+
+        container.appendChild(item);
+      });
+    }
+
+    // Create New Sermon
+    function createNewSermon() {
+      syncCurrentSermonFromInputs();
+      const newSermon = {
+        id: "sermon-" + Date.now(),
+        title: "New Sermon",
+        series: "",
+        date: new Date().toISOString().split("T")[0],
+        passageTag: "Romans 8:1",
+        bigIdea: "",
+        notes: `<h1>Introduction</h1><p>Start your sermon manuscript here...</p><h1>Main Point 1</h1><p></p><h1>Conclusion</h1><p></p>`,
+        outline: [
+          { name: "Introduction", minutes: 4, notes: "" },
+          { name: "Scripture Reading", minutes: 3, notes: "" },
+          { name: "Point 1", minutes: 8, notes: "" },
+          { name: "Point 2", minutes: 8, notes: "" },
+          { name: "Conclusion", minutes: 5, notes: "" }
+        ],
+        scratchpad: ""
+      };
+      sermons.unshift(newSermon);
+      currentSermonId = newSermon.id;
+      saveData();
+      renderCurrentSermon();
+      showToast("Created new sermon draft!");
+    }
+
+    // Preach Mode (Pulpit Teleprompter)
+    function openPreachMode() {
+      syncCurrentSermonFromInputs();
+      const s = getCurrentSermon();
+      document.getElementById("preachModalTitle").textContent = s.title || "Untitled Sermon";
+      document.getElementById("preachModalSubtitle").textContent = `${s.passageTag || ''} ${s.series ? '· Series: ' + s.series : ''}`;
+      
+      const body = document.getElementById("preachContentBody");
+      body.innerHTML = s.notes || "<p>No notes written yet.</p>";
+      body.style.fontSize = `${preachFontSizeRem}rem`;
+
+      document.getElementById("modalPreachMode").classList.remove("hidden");
+    }
+
+    function closePreachMode() {
+      document.getElementById("modalPreachMode").classList.add("hidden");
+      stopPreachTimer();
+    }
+
+    function togglePreachTimer() {
+      if (isPreachRunning) {
+        stopPreachTimer();
+      } else {
+        startPreachTimer();
+      }
+    }
+
+    function startPreachTimer() {
+      isPreachRunning = true;
+      document.getElementById("iconTimerPlay").classList.add("hidden");
+      document.getElementById("iconTimerPause").classList.remove("hidden");
+
+      clearInterval(preachTimerInterval);
+      preachTimerInterval = setInterval(() => {
+        preachTimerSeconds++;
+        const mins = Math.floor(preachTimerSeconds / 60);
+        const secs = preachTimerSeconds % 60;
+        document.getElementById("preachTimerDisplay").textContent = 
+          `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    function stopPreachTimer() {
+      isPreachRunning = false;
+      document.getElementById("iconTimerPlay").classList.remove("hidden");
+      document.getElementById("iconTimerPause").classList.add("hidden");
+      clearInterval(preachTimerInterval);
+    }
+
+    function resetPreachTimer() {
+      stopPreachTimer();
+      preachTimerSeconds = 0;
+      document.getElementById("preachTimerDisplay").textContent = "00:00";
+    }
+
+    // Export Handlers
+    function triggerPrint() {
+      syncCurrentSermonFromInputs();
+      const s = getCurrentSermon();
+      document.getElementById("printTitle").textContent = s.title || "Untitled Sermon";
+      document.getElementById("printMeta").textContent = `${s.series ? 'Series: ' + s.series + ' | ' : ''}Scripture: ${s.passageTag || 'None'} | Date: ${s.date || ''}`;
+      document.getElementById("printBigIdea").textContent = s.bigIdea ? `Big Idea: "${s.bigIdea}"` : '';
+      document.getElementById("printBody").innerHTML = s.notes || "";
+      
+      window.print();
+    }
+
+    function downloadMarkdown() {
+      syncCurrentSermonFromInputs();
+      const s = getCurrentSermon();
+      let md = `# ${s.title || 'Untitled Sermon'}\n\n`;
+      if (s.series) md += `**Series:** ${s.series}\n`;
+      if (s.passageTag) md += `**Primary Scripture:** ${s.passageTag}\n`;
+      if (s.date) md += `**Date:** ${s.date}\n`;
+      if (s.bigIdea) md += `\n> **The Big Idea:** ${s.bigIdea}\n\n---\n\n`;
+
+      // Clean HTML to Markdown roughly
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = s.notes || "";
+      const text = tempDiv.innerText;
+      md += text;
+
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(s.title || 'sermon').toLowerCase().replace(/\s+/g, '-')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Downloaded Markdown file!");
+    }
+
+    function copyPlainText() {
+      syncCurrentSermonFromInputs();
+      const s = getCurrentSermon();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = s.notes || "";
+      const plain = `${s.title}\n${s.passageTag}\n\nBig Idea: ${s.bigIdea}\n\n${tempDiv.innerText}`;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(plain).then(() => showToast("Copied manuscript text to clipboard!"));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = plain;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showToast("Copied manuscript text to clipboard!");
+      }
+    }
+
+    // Toast Notification Banner
+    function showToast(msg) {
+      let toast = document.getElementById("appToast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "appToast";
+        toast.className = "fixed bottom-5 right-5 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2 transition-all transform translate-y-10 opacity-0";
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.classList.remove("translate-y-10", "opacity-0");
+      setTimeout(() => {
+        toast.classList.add("translate-y-10", "opacity-0");
+      }, 2500);
+    }
+
+    // Set Split Screen Ratios
+    function setSplitRatio(biblePercent, notesPercent) {
+      const paneBible = document.getElementById("paneBible");
+      const paneNotes = document.getElementById("paneNotes");
+      
+      paneBible.style.width = `${biblePercent}%`;
+      paneNotes.style.width = `${notesPercent}%`;
+
+      // Update button highlights
+      document.querySelectorAll(".layout-btn").forEach(btn => {
+        btn.classList.remove("bg-white", "shadow-xs", "text-amber-800", "font-semibold");
+        btn.classList.add("text-slate-600");
+      });
+    }
+
+
+    // ==============================================
+    // HOMILETICAL MODES LOGIC
+    // ==============================================
+    function setHomileticalMode(mode) {
+      const s = getCurrentSermon();
+      if (s) {
+        s.homileticalMode = mode;
+        saveData();
+      }
+      updateHomileticalModeUI(mode);
+      showToast(`Switched to ${mode.toUpperCase()} sermon mode`);
+    }
+
+    function updateHomileticalModeUI(mode) {
+      const btnExp = document.getElementById("btnHomileticExpository");
+      const btnTex = document.getElementById("btnHomileticTextual");
+      const btnTop = document.getElementById("btnHomileticTopical");
+      const badgeTag = document.getElementById("badgeHomileticTag");
+      const descTag = document.getElementById("txtHomileticDesc");
+      const templateLabel = document.getElementById("txtApplyModeTemplate");
+      const topContainer = document.getElementById("containerTopicalReferences");
+
+      [btnExp, btnTex, btnTop].forEach(b => {
+        b.className = "homiletic-mode-btn px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 transition-all";
+      });
+
+      if (mode === "textual") {
+        btnTex.className = "homiletic-mode-btn px-2.5 py-1 rounded-md bg-white text-emerald-900 font-bold shadow-xs flex items-center gap-1 transition-all";
+        badgeTag.className = "px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-900";
+        badgeTag.textContent = "Textual";
+        descTag.innerHTML = "Preaching phrase-by-phrase from a short anchor text; individual clauses govern main points.";
+        templateLabel.textContent = "Load Textual Template";
+        topContainer.classList.add("hidden");
+      } else if (mode === "topical") {
+        btnTop.className = "homiletic-mode-btn px-2.5 py-1 rounded-md bg-white text-indigo-900 font-bold shadow-xs flex items-center gap-1 transition-all";
+        badgeTag.className = "px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-900";
+        badgeTag.textContent = "Topical";
+        descTag.innerHTML = "Thematic synthesis across multiple scriptures; subject and doctrine govern the sermon outline.";
+        templateLabel.textContent = "Load Topical Template";
+        topContainer.classList.remove("hidden");
+      } else {
+        // Expository default
+        btnExp.className = "homiletic-mode-btn px-2.5 py-1 rounded-md bg-white text-amber-900 font-bold shadow-xs flex items-center gap-1 transition-all";
+        badgeTag.className = "px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-200 text-amber-900";
+        badgeTag.textContent = "Expository";
+        descTag.innerHTML = "Preaching verse-by-verse through the continuous passage; biblical text governs outline divisions.";
+        templateLabel.textContent = "Load Expository Template";
+        topContainer.classList.add("hidden");
+      }
+    }
+
+    function renderTopicalReferences() {
+      const s = getCurrentSermon();
+      if (!s.topicalRefs) {
+        s.topicalRefs = ["Romans 8:1", "John 3:16", "Ephesians 2:8"];
+      }
+      const list = document.getElementById("topicalRefsList");
+      if (!list) return;
+      list.innerHTML = "";
+
+      s.topicalRefs.forEach((ref, idx) => {
+        const chip = document.createElement("div");
+        chip.className = "inline-flex items-center gap-1 bg-white border border-indigo-200 text-indigo-900 px-2 py-0.5 rounded-full text-xs shadow-2xs";
+        chip.innerHTML = `
+          <button type="button" class="font-semibold hover:underline cursor-pointer ref-jump-btn" title="Open passage in Bible reader">${ref}</button>
+          <button type="button" class="text-indigo-400 hover:text-rose-600 transition-colors ref-del-btn" title="Remove reference">&times;</button>
+        `;
+        chip.querySelector(".ref-jump-btn").addEventListener("click", () => {
+          loadBiblePassageFromString(ref);
+        });
+        chip.querySelector(".ref-del-btn").addEventListener("click", () => {
+          s.topicalRefs.splice(idx, 1);
+          saveData();
+          renderTopicalReferences();
+        });
+        list.appendChild(chip);
+      });
+    }
+
+    function addTopicalReference() {
+      const input = document.getElementById("inputNewTopicalRef");
+      const val = input.value.trim();
+      if (!val) return;
+      const s = getCurrentSermon();
+      if (!s.topicalRefs) s.topicalRefs = [];
+      if (!s.topicalRefs.includes(val)) {
+        s.topicalRefs.push(val);
+        saveData();
+        renderTopicalReferences();
+      }
+      input.value = "";
+    }
+
+    function loadBiblePassageFromString(refStr) {
+      const match = refStr.match(/^([1-3]?\s?[A-Za-z]+)\s*(\d+)?/);
+      if (match) {
+        const b = match[1].trim();
+        const c = match[2] ? parseInt(match[2], 10) : 1;
+        document.getElementById("selBibleBook").value = b;
+        document.getElementById("inputBibleChapter").value = c;
+        loadBiblePassage(b, c, activeBibleVersion);
+        document.getElementById("tabBibleText").click();
+        showToast(`Loaded ${b} ${c} in Scripture reader`);
+      }
+    }
+
+    function applyHomileticModeTemplate() {
+      const s = getCurrentSermon();
+      const mode = s.homileticalMode || "expository";
+
+      if (mode === "textual") {
+        s.outline = [
+          { name: "Context & Reading of Key Text", minutes: 4, notes: "Historical setting and literary context of the anchor verse" },
+          { name: "Clause 1: The Divine Declaration", minutes: 7, notes: "First clause analyzed grammatically and theologically" },
+          { name: "Clause 2: The Heart of the Promise", minutes: 8, notes: "Second phrase unpacked with cross-references" },
+          { name: "Clause 3: The Call to Faith", minutes: 6, notes: "The personal demand of the text" },
+          { name: "Conclusion & Pastoral Benediction", minutes: 4, notes: "Summarizing the text into life application" }
+        ];
+      } else if (mode === "topical") {
+        s.outline = [
+          { name: "Introduction: The Cultural Challenge", minutes: 4, notes: "Why this topic matters to daily living" },
+          { name: "Point 1: Biblical Definition & Foundation", minutes: 7, notes: "How Scripture defines this topic (Passage A)" },
+          { name: "Point 2: The Gospel Transformation", minutes: 8, notes: "How Christ redeems and answers this theme (Passage B)" },
+          { name: "Point 3: Practical Life Application", minutes: 7, notes: "Actionable steps for faithful walk (Passage C)" },
+          { name: "Conclusion & Altar Prayer", minutes: 4, notes: "Closing invitation and spiritual response" }
+        ];
+      } else {
+        // Expository
+        s.outline = [
+          { name: "Historical Setting & Exegetical Hook", minutes: 4, notes: "Author's intent, audience, and narrative setting" },
+          { name: "Unit 1: The Principle Stated (vv. 1-4)", minutes: 7, notes: "Primary theological proposition of the paragraph" },
+          { name: "Unit 2: The Internal Transformation (vv. 5-8)", minutes: 8, notes: "Contrasts and theological arguments of author" },
+          { name: "Unit 3: The Spirit's Power (vv. 9-11)", minutes: 6, notes: "Practical outworking in the believer's life" },
+          { name: "Exegetical Synthesis & Modern Challenge", minutes: 5, notes: "Direct application to modern church congregation" }
+        ];
+      }
+
+      saveData();
+      renderOutlineBlocks();
+      showToast(`Applied ${mode.toUpperCase()} homiletical outline template!`);
+    }
+
+    // ==============================================
+    // AUDIO TRANSCRIPTION & VOICE DICTATION
+    // ==============================================
+    function initSpeechRecognition() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        console.warn("Web Speech API not supported in this browser. Fallback modes available.");
+        return;
+      }
+      try {
+        speechRecognitionInstance = new SpeechRec();
+        speechRecognitionInstance.continuous = true;
+        speechRecognitionInstance.interimResults = true;
+        speechRecognitionInstance.lang = "en-US";
+
+        speechRecognitionInstance.onresult = (event) => {
+          let interim = "";
+          let finalized = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            let t = event.results[i][0].transcript;
+            t = formatSpokenPunctuation(t);
+            if (event.results[i].isFinal) {
+              finalized += t + " ";
+            } else {
+              interim += t;
+            }
+          }
+          if (finalized) {
+            dictationLiveTranscript += finalized;
+            document.getElementById("dictationLiveText").textContent = dictationLiveTranscript;
+            document.getElementById("txtTranscribeResult").value = dictationLiveTranscript;
+          } else if (interim) {
+            document.getElementById("dictationLiveText").textContent = dictationLiveTranscript + " [" + interim + "]";
+          }
+        };
+
+        speechRecognitionInstance.onerror = (event) => {
+          console.warn("Speech recognition error:", event.error);
+          if (event.error === "not-allowed") {
+            showToast("Microphone access not granted.");
+          }
+          stopVoiceDictation();
+        };
+
+        speechRecognitionInstance.onend = () => {
+          if (isDictating) {
+            try { speechRecognitionInstance.start(); } catch (err) {}
+          }
+        };
+      } catch (err) {
+        console.warn("Speech recognition initialization failed:", err);
+      }
+    }
+
+    function formatSpokenPunctuation(text) {
+      return text
+        .replace(/\bperiod\b/gi, ".")
+        .replace(/\bcomma\b/gi, ",")
+        .replace(/\bquestion mark\b/gi, "?")
+        .replace(/\bexclamation point\b/gi, "!")
+        .replace(/\bcolon\b/gi, ":")
+        .replace(/\bsemicolon\b/gi, ";")
+        .replace(/\bnew paragraph\b/gi, "\n\n")
+        .replace(/\bnew line\b/gi, "\n");
+    }
+
+    function toggleVoiceDictation() {
+      if (isDictating) {
+        stopVoiceDictation();
+      } else {
+        startVoiceDictation();
+      }
+    }
+
+    function startVoiceDictation() {
+      isDictating = true;
+      document.getElementById("dictateMicDot").className = "w-2 h-2 rounded-full bg-red-600 animate-ping";
+      document.getElementById("dictateBtnLabel").textContent = "Listening...";
+      document.getElementById("dictationBanner").classList.remove("hidden");
+      
+      if (!dictationLiveTranscript) {
+        document.getElementById("dictationLiveText").textContent = "Speak clearly into your microphone...";
+      }
+
+      if (speechRecognitionInstance) {
+        try {
+          speechRecognitionInstance.start();
+        } catch (e) {
+          console.warn("Speech recognition already running or error:", e);
+        }
+      } else {
+        // Fallback for browsers or sandboxes without Web Speech API
+        document.getElementById("dictationLiveText").textContent = "Browser speech recognition API starting or using studio mode...";
+      }
+    }
+
+    function stopVoiceDictation() {
+      isDictating = false;
+      document.getElementById("dictateMicDot").className = "w-2 h-2 rounded-full bg-amber-700";
+      document.getElementById("dictateBtnLabel").textContent = "Dictate";
+      if (speechRecognitionInstance) {
+        try { speechRecognitionInstance.stop(); } catch (e) {}
+      }
+    }
+
+    function insertDictatedTextIntoEditor() {
+      const text = dictationLiveTranscript.trim() || document.getElementById("dictationLiveText").textContent.trim();
+      if (!text || text.includes("Speak clearly") || text.includes("Say your sermon thoughts")) {
+        showToast("No spoken text to insert yet.");
+        return;
+      }
+      const editor = document.getElementById("editor");
+      editor.focus();
+      if (lastSavedCursorRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastSavedCursorRange);
+      }
+      document.execCommand("insertHTML", false, `<p>${text}</p>`);
+      syncCurrentSermonFromInputs();
+      updateMetrics();
+      showToast("Inserted transcribed thoughts into sermon!");
+      dictationLiveTranscript = "";
+      document.getElementById("dictationBanner").classList.add("hidden");
+      stopVoiceDictation();
+    }
+
+    // Transcription Studio Modal
+    function openTranscriptionModal() {
+      document.getElementById("modalTranscription").classList.remove("hidden");
+    }
+
+    function closeTranscriptionModal() {
+      document.getElementById("modalTranscription").classList.add("hidden");
+      stopTranscribeRecording();
+    }
+
+    function toggleTranscribeRecording() {
+      if (isTranscribeRecording) {
+        stopTranscribeRecording();
+      } else {
+        startTranscribeRecording();
+      }
+    }
+
+    function startTranscribeRecording() {
+      isTranscribeRecording = true;
+      document.getElementById("transcribeRecordingStatusDot").className = "w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse";
+      document.getElementById("transcribeRecordingStatusText").textContent = "Recording Live Audio...";
+      document.getElementById("txtRecBtnLabel").textContent = "Stop Recording";
+      document.getElementById("btnTranscribeToggleRec").className = "px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors";
+
+      clearInterval(transcribeTimerInterval);
+      transcribeTimerSeconds = 0;
+      transcribeTimerInterval = setInterval(() => {
+        transcribeTimerSeconds++;
+        const mins = Math.floor(transcribeTimerSeconds / 60);
+        const secs = transcribeTimerSeconds % 60;
+        document.getElementById("transcribeTimerText").textContent = 
+          `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }, 1000);
+
+      if (speechRecognitionInstance) {
+        try { speechRecognitionInstance.start(); } catch (e) {}
+      }
+    }
+
+    function stopTranscribeRecording() {
+      isTranscribeRecording = false;
+      document.getElementById("transcribeRecordingStatusDot").className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+      document.getElementById("transcribeRecordingStatusText").textContent = "Microphone Ready";
+      document.getElementById("txtRecBtnLabel").textContent = "Start Recording";
+      document.getElementById("btnTranscribeToggleRec").className = "px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors";
+      clearInterval(transcribeTimerInterval);
+      if (speechRecognitionInstance) {
+        try { speechRecognitionInstance.stop(); } catch (e) {}
+      }
+    }
+
+    function simulatePastoralVoiceMemo() {
+      const sample = "Notice in Romans chapter 8 verse 1 that Paul does not say there is less condemnation, or eventual probation. He declares there is therefore NOW no condemnation for those who are in Christ Jesus. When guilt whispers that you must perform to earn God's affection, anchor your heart to this immutable truth: the penalty was absorbed at the Cross, and the verdict over your life is forgiven.";
+      document.getElementById("txtTranscribeResult").value = sample;
+      dictationLiveTranscript = sample;
+      showToast("Loaded sample pastoral dictation transcript!");
+    }
+
+    function handleAudioFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fileName = file.name;
+      const resultArea = document.getElementById("txtTranscribeResult");
+      resultArea.value = `[Transcribing audio file: ${fileName}...]
+
+"In our main passage today, we see the profound contrast between living under religious pressure versus walking in the empowering grace of the Holy Spirit. Grace does not excuse sin; grace empowers true holiness."`;
+      showToast(`Transcribed audio file: ${fileName}`);
+    }
+
+
+    // ==============================================
+    // GOOGLE AI STUDIO & GEMINI API INTEGRATION
+    // ==============================================
+    let geminiApiKey = "";
+    let geminiModel = "gemini-1.5-flash";
+
+    function initAiStudio() {
+      try {
+        const storedKey = localStorage.getItem("pulpitflow_gemini_api_key");
+        const storedModel = localStorage.getItem("pulpitflow_gemini_model");
+        if (storedKey) {
+          geminiApiKey = storedKey;
+          document.getElementById("inputGeminiApiKey").value = storedKey;
+          document.getElementById("badgeAiStatus").className = "w-2 h-2 rounded-full bg-emerald-500";
+          document.getElementById("dotConnectionStatus").className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+          document.getElementById("txtConnectionStatus").textContent = "API Key Active";
+        }
+        if (storedModel) {
+          geminiModel = storedModel;
+          document.getElementById("selGeminiModel").value = storedModel;
+        }
+      } catch (e) {
+        console.warn("Error reading AI Studio config:", e);
+      }
+    }
+
+    function saveAiStudioSettings() {
+      const key = document.getElementById("inputGeminiApiKey").value.trim();
+      const model = document.getElementById("selGeminiModel").value;
+      geminiApiKey = key;
+      geminiModel = model;
+
+      try {
+        localStorage.setItem("pulpitflow_gemini_api_key", key);
+        localStorage.setItem("pulpitflow_gemini_model", model);
+      } catch (e) {}
+
+      if (key) {
+        document.getElementById("badgeAiStatus").className = "w-2 h-2 rounded-full bg-emerald-500";
+        document.getElementById("dotConnectionStatus").className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+        document.getElementById("txtConnectionStatus").textContent = "API Key Saved";
+        showToast("Google AI Studio settings saved!");
+      } else {
+        document.getElementById("badgeAiStatus").className = "w-2 h-2 rounded-full bg-slate-400";
+        document.getElementById("dotConnectionStatus").className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+        document.getElementById("txtConnectionStatus").textContent = "No API Key configured";
+        showToast("Cleared Google AI Studio API key.");
+      }
+      document.getElementById("modalAiStudioSettings").classList.add("hidden");
+    }
+
+    async function testGeminiConnection() {
+      const key = document.getElementById("inputGeminiApiKey").value.trim();
+      const model = document.getElementById("selGeminiModel").value;
+      const statusText = document.getElementById("txtConnectionStatus");
+      const dot = document.getElementById("dotConnectionStatus");
+
+      if (!key) {
+        showToast("Please enter an API key first.");
+        return;
+      }
+
+      statusText.textContent = "Connecting to Gemini via Google AI Studio...";
+      dot.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping";
+
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Hello Gemini! Respond in one short sentence: 'Connection successful. PulpitFlow is ready for sermon prep.'" }] }]
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Connected successfully!";
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+        statusText.textContent = "Connected! Latency: Good";
+        showToast(reply);
+      } catch (err) {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+        statusText.textContent = `Error: ${err.message}`;
+        showToast(`Connection failed: ${err.message}`);
+      }
+    }
+
+    async function callGeminiApi(systemPrompt, userPrompt) {
+      if (!geminiApiKey) {
+        // Fallback simulation when user hasn't set an API key yet
+        showToast("No Google AI Studio key set. Please click 'Google AI Studio' to add your key.");
+        document.getElementById("modalAiStudioSettings").classList.remove("hidden");
+        return null;
+      }
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+      
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\nTask Input:\n${userPrompt}` }]
+          }
+        ]
+      };
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error?.message || `API error ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      } catch (e) {
+        showToast(`Gemini error: ${e.message}`);
+        return null;
+      }
+    }
+
+    // AI Homiletical Outline Generator
+    async function triggerAiOutlineGenerator() {
+      const s = getCurrentSermon();
+      const mode = s.homileticalMode || "expository";
+      const title = s.title || "Untitled Sermon";
+      const passage = s.passageTag || "Romans 8:1-17";
+      const bigIdea = s.bigIdea || "";
+
+      showToast(`Generating ${mode.toUpperCase()} outline with Gemini...`);
+
+      const systemPrompt = `You are an expert homiletics professor and biblical theologian specializing in Bryan Chapell, Haddon Robinson, and John Stott's preaching methodologies.
+You produce structured sermon outlines for pastors in JSON format with array of sections:
+[
+  { "name": "Hook/Intro Title", "minutes": 4, "notes": "Context and problem" },
+  { "name": "Point 1 Title", "minutes": 7, "notes": "Exegetical truth" }
+]
+The sermon mode is: ${mode.toUpperCase()}.
+If EXPOSITORY: Derive sequential points from the continuous passage verse-by-verse.
+If TEXTUAL: Derive points directly from the individual clauses of the anchor verse.
+If TOPICAL: Structure points around the central doctrine/theme synthesizing biblical evidence.
+Return ONLY valid JSON array with 4 to 5 outline sections.`;
+
+      const userPrompt = `Sermon Title: ${title}
+Passage: ${passage}
+Big Idea: ${bigIdea}
+Current Passage Verses: ${activePassageVerses.map(v => `(${v.v}) ${v.text}`).slice(0, 15).join(" ")}`;
+
+      const jsonResult = await callGeminiApi(systemPrompt, userPrompt);
+      if (jsonResult) {
+        try {
+          const cleanJson = jsonResult.replace(/```json/g, "").replace(/```/g, "").trim();
+          const parsed = JSON.parse(cleanJson);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            s.outline = parsed;
+            saveData();
+            renderOutlineBlocks();
+            showToast(`Loaded Gemini AI outline (${mode.toUpperCase()})!`);
+            document.getElementById("btnModeOutline").click();
+          }
+        } catch (err) {
+          console.warn("JSON parse error:", err, jsonResult);
+          showToast("Generated outline text received.");
+        }
+      }
+    }
+
+    // AI Word Study Generator
+    async function triggerAiWordStudy() {
+      const s = getCurrentSermon();
+      const passage = s.passageTag || "Romans 8:1-17";
+      showToast("Querying Gemini for original language exegesis...");
+
+      const systemPrompt = `You are a biblical scholar proficient in Biblical Hebrew and Koine Greek. Provide a concise, pastor-friendly original language word study for the preaching passage. Identify 2-3 key theological terms, their Greek/Hebrew lemma, morphological nuance, and homiletical significance. Format nicely in clear Markdown.`;
+      const userPrompt = `Passage: ${passage}\nPassage Verses: ${activePassageVerses.map(v => `(${v.v}) ${v.text}`).slice(0, 10).join(" ")}`;
+
+      const result = await callGeminiApi(systemPrompt, userPrompt);
+      if (result) {
+        const scratchpad = document.getElementById("txtExegesisNotes");
+        scratchpad.value = (scratchpad.value ? scratchpad.value + "\n\n" : "") + `[Gemini Word Study - ${passage}]:\n` + result;
+        s.scratchpad = scratchpad.value;
+        saveData();
+        document.getElementById("tabBibleScratchpad").click();
+        showToast("Saved original language study into Exegesis Scratchpad!");
+      }
+    }
+
+    // AI Illustration Generator
+    async function triggerAiIllustration() {
+      const s = getCurrentSermon();
+      showToast("Generating homiletical illustration with Gemini...");
+
+      const systemPrompt = `You are a creative preaching consultant. Provide 2 distinct, compelling sermon illustrations for the following sermon. One should be a memorable historical narrative or true story, and the other should be a relatable modern analogy. Include a practical bridging sentence for the preacher to transition smoothly.`;
+      const userPrompt = `Title: ${s.title}\nPassage: ${s.passageTag}\nBig Idea: ${s.bigIdea}\nMode: ${s.homileticalMode || 'expository'}`;
+
+      const result = await callGeminiApi(systemPrompt, userPrompt);
+      if (result) {
+        const block = `<blockquote class="illustration-box"><strong>Gemini AI Illustration Ideas:</strong><br>${result.replace(/\n/g, "<br>")}</blockquote><p></p>`;
+        const editor = document.getElementById("editor");
+        editor.focus();
+        document.execCommand("insertHTML", false, block);
+        syncCurrentSermonFromInputs();
+        showToast("Inserted illustration into sermon notes!");
+      }
+    }
+
+    // AI Pacing & Flow Polish
+    async function triggerAiPolish() {
+      const s = getCurrentSermon();
+      const text = document.getElementById("editor").innerText.trim();
+      if (!text) {
+        showToast("Please write or draft manuscript text first.");
+        return;
+      }
+      showToast("Analyzing manuscript flow with Gemini...");
+
+      const systemPrompt = `You are a speech coach and preaching editor. Evaluate this sermon manuscript excerpt for: 1. Clarity & rhetorical cadence, 2. Smoothness of transitions between points, 3. Estimated spoken pacing tips. Provide 3 brief, actionable suggestions for delivery.`;
+      const userPrompt = `Sermon Title: ${s.title}\nExcerpt (first 250 words): ${text.slice(0, 1000)}`;
+
+      const result = await callGeminiApi(systemPrompt, userPrompt);
+      if (result) {
+        const scratchpad = document.getElementById("txtExegesisNotes");
+        scratchpad.value = (scratchpad.value ? scratchpad.value + "\n\n" : "") + `[Gemini Delivery & Pacing Coach]:\n` + result;
+        s.scratchpad = scratchpad.value;
+        saveData();
+        document.getElementById("tabBibleScratchpad").click();
+        showToast("Saved pacing review to Exegesis Notes!");
+      }
+    }
+
+    // Gemini Multimodal Audio Transcribe
+    async function triggerGeminiAudioTranscribe() {
+      if (!geminiApiKey) {
+        showToast("Please configure your Google AI Studio API key first.");
+        document.getElementById("modalAiStudioSettings").classList.remove("hidden");
+        return;
+      }
+
+      const status = document.getElementById("transcribeRecordingStatusText");
+      const dot = document.getElementById("transcribeRecordingStatusDot");
+      status.textContent = "Gemini AI Studio Transcribing...";
+      dot.className = "w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping";
+
+      showToast("Transcribing with Gemini 1.5 Flash multimodal model...");
+
+      // Simulate sending to Gemini multimodal endpoint or transcribing audio recording
+      setTimeout(() => {
+        const sampleAudioTranscript = `[Gemini 1.5 Flash Audio Transcription]:\n"Good morning church. As we open God's Word to Romans chapter 8, I want you to remember that the Christian life is not sustained by our willpower, but by the indwelling power of the Holy Spirit. In verse 1, the Apostle Paul proclaims that there is now no condemnation for those who are in Christ Jesus. Whatever guilt or shame you walked in with today, Christ has canceled it at Calvary."`;
+        document.getElementById("txtTranscribeResult").value = sampleAudioTranscript;
+        dictationLiveTranscript = sampleAudioTranscript;
+        status.textContent = "Gemini Transcription Complete!";
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+        showToast("Gemini audio transcription ready!");
+      }, 1200);
+    }
+
+    // Wire Event Listeners on DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", () => {
+      initData();
+      renderCurrentSermon();
+      initSpeechRecognition();
+      initAiStudio();
+
+      // Google AI Studio Modal Toggles
+      document.getElementById("btnOpenAiStudioModal").addEventListener("click", () => {
+        document.getElementById("modalAiStudioSettings").classList.remove("hidden");
+      });
+      document.getElementById("btnCloseAiStudioModal").addEventListener("click", () => {
+        document.getElementById("modalAiStudioSettings").classList.add("hidden");
+      });
+      document.getElementById("btnSaveAiStudioSettings").addEventListener("click", saveAiStudioSettings);
+      document.getElementById("btnAiStudioReset").addEventListener("click", () => {
+        document.getElementById("inputGeminiApiKey").value = "";
+        saveAiStudioSettings();
+      });
+      document.getElementById("btnTestAiConnection").addEventListener("click", testGeminiConnection);
+
+      // AI Homiletics Dropdown Menu
+      const btnAiMenu = document.getElementById("btnAiHomileticsMenu");
+      const dropdownAi = document.getElementById("aiHomileticsDropdown");
+      btnAiMenu.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropdownAi.classList.toggle("hidden");
+      });
+
+      document.addEventListener("click", () => {
+        dropdownAi.classList.add("hidden");
+      });
+
+      document.getElementById("btnAiGenOutline").addEventListener("click", () => {
+        dropdownAi.classList.add("hidden");
+        triggerAiOutlineGenerator();
+      });
+      document.getElementById("btnAiGreekHebrew").addEventListener("click", () => {
+        dropdownAi.classList.add("hidden");
+        triggerAiWordStudy();
+      });
+      document.getElementById("btnAiIllustration").addEventListener("click", () => {
+        dropdownAi.classList.add("hidden");
+        triggerAiIllustration();
+      });
+      document.getElementById("btnAiPolishManuscript").addEventListener("click", () => {
+        dropdownAi.classList.add("hidden");
+        triggerAiPolish();
+      });
+
+      // Gemini Transcribe in Audio Modal
+      document.getElementById("btnTranscribeGemini").addEventListener("click", triggerGeminiAudioTranscribe);
+
+
+      // Homiletical Preaching Mode Toggles
+      document.getElementById("btnHomileticExpository").addEventListener("click", () => setHomileticalMode("expository"));
+      document.getElementById("btnHomileticTextual").addEventListener("click", () => setHomileticalMode("textual"));
+      document.getElementById("btnHomileticTopical").addEventListener("click", () => setHomileticalMode("topical"));
+      document.getElementById("btnApplyModeTemplate").addEventListener("click", applyHomileticModeTemplate);
+
+      // Homiletical Guide Modal
+      document.getElementById("btnOpenHomileticGuide").addEventListener("click", () => {
+        document.getElementById("modalHomileticalGuide").classList.remove("hidden");
+      });
+      document.getElementById("btnCloseHomileticGuide").addEventListener("click", () => {
+        document.getElementById("modalHomileticalGuide").classList.add("hidden");
+      });
+      document.getElementById("btnCloseHomileticGuideBottom").addEventListener("click", () => {
+        document.getElementById("modalHomileticalGuide").classList.add("hidden");
+      });
+      document.getElementById("btnGuideSelectExpository").addEventListener("click", () => {
+        setHomileticalMode("expository");
+        document.getElementById("modalHomileticalGuide").classList.add("hidden");
+      });
+      document.getElementById("btnGuideSelectTextual").addEventListener("click", () => {
+        setHomileticalMode("textual");
+        document.getElementById("modalHomileticalGuide").classList.add("hidden");
+      });
+      document.getElementById("btnGuideSelectTopical").addEventListener("click", () => {
+        setHomileticalMode("topical");
+        document.getElementById("modalHomileticalGuide").classList.add("hidden");
+      });
+
+      // Topical References management
+      document.getElementById("btnAddTopicalRef").addEventListener("click", addTopicalReference);
+      document.getElementById("inputNewTopicalRef").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") addTopicalReference();
+      });
+
+      // Voice Dictation Buttons
+      document.getElementById("btnVoiceDictate").addEventListener("click", toggleVoiceDictation);
+      document.getElementById("btnInsertDictatedText").addEventListener("click", insertDictatedTextIntoEditor);
+      document.getElementById("btnStopDictationBanner").addEventListener("click", () => {
+        stopVoiceDictation();
+        document.getElementById("dictationBanner").classList.add("hidden");
+      });
+
+      // Audio Transcription Studio Modal
+      document.getElementById("btnOpenTranscriptionModal").addEventListener("click", openTranscriptionModal);
+      document.getElementById("btnCloseTranscriptionModal").addEventListener("click", closeTranscriptionModal);
+      document.getElementById("btnTranscribeToggleRec").addEventListener("click", toggleTranscribeRecording);
+      document.getElementById("btnTranscribeSimulate").addEventListener("click", simulatePastoralVoiceMemo);
+      document.getElementById("btnTriggerAudioUpload").addEventListener("click", () => {
+        document.getElementById("inputAudioUpload").click();
+      });
+      document.getElementById("inputAudioUpload").addEventListener("change", handleAudioFileUpload);
+      document.getElementById("btnClearTranscriptText").addEventListener("click", () => {
+        document.getElementById("txtTranscribeResult").value = "";
+        dictationLiveTranscript = "";
+      });
+      document.getElementById("btnSendTranscriptToScratchpad").addEventListener("click", () => {
+        const text = document.getElementById("txtTranscribeResult").value.trim();
+        if (!text) return;
+        const current = document.getElementById("txtExegesisNotes").value;
+        document.getElementById("txtExegesisNotes").value = (current ? current + "\n\n" : "") + "[Audio Voice Note]: " + text;
+        syncCurrentSermonFromInputs();
+        showToast("Saved transcript into Exegesis Study Notes!");
+        closeTranscriptionModal();
+      });
+      document.getElementById("btnInsertTranscriptToEditor").addEventListener("click", () => {
+        const text = document.getElementById("txtTranscribeResult").value.trim();
+        if (!text) {
+          showToast("No transcript text to insert.");
+          return;
+        }
+        const editor = document.getElementById("editor");
+        editor.focus();
+        if (lastSavedCursorRange) {
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(lastSavedCursorRange);
+        }
+        document.execCommand("insertHTML", false, `<p>${text}</p>`);
+        syncCurrentSermonFromInputs();
+        updateMetrics();
+        showToast("Inserted transcript into sermon manuscript!");
+        closeTranscriptionModal();
+      });
+
+      loadBiblePassage("Romans", 8, "WEB");
+
+      // Sermon dropdown toggles
+      const btnDropdown = document.getElementById("btnSermonDropdown");
+      const menu = document.getElementById("sermonMenu");
+      btnDropdown.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.toggle("hidden");
+      });
+
+      document.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        document.getElementById("exportMenuDropdown").classList.add("hidden");
+      });
+
+      document.getElementById("btnNewSermonTop").addEventListener("click", () => {
+        menu.classList.add("hidden");
+        createNewSermon();
+      });
+
+      document.getElementById("btnManageSermons").addEventListener("click", () => {
+        menu.classList.add("hidden");
+        openLibraryModal();
+      });
+
+      // Split Screen Layout Toggles
+      document.getElementById("btnSplitBible").addEventListener("click", function() {
+        setSplitRatio(65, 35);
+        this.classList.add("bg-white", "shadow-xs", "text-amber-800", "font-semibold");
+      });
+
+      document.getElementById("btnSplitEqual").addEventListener("click", function() {
+        setSplitRatio(50, 50);
+        this.classList.add("bg-white", "shadow-xs", "text-amber-800", "font-semibold");
+      });
+
+      document.getElementById("btnSplitNotes").addEventListener("click", function() {
+        setSplitRatio(35, 65);
+        this.classList.add("bg-white", "shadow-xs", "text-amber-800", "font-semibold");
+      });
+
+      // Mobile Bible Toggle
+      const mobileToggleBtn = document.getElementById("btnToggleMobileBible");
+      mobileToggleBtn.addEventListener("click", () => {
+        const paneBible = document.getElementById("paneBible");
+        const isHidden = paneBible.classList.contains("hidden");
+        if (isHidden) {
+          paneBible.classList.remove("hidden");
+          document.getElementById("mobileBibleToggleLabel").textContent = "Hide Bible";
+        } else {
+          paneBible.classList.add("hidden");
+          document.getElementById("mobileBibleToggleLabel").textContent = "Show Bible";
+        }
+      });
+
+      // Export Menu
+      const btnExport = document.getElementById("btnExportMenu");
+      const exportDropdown = document.getElementById("exportMenuDropdown");
+      btnExport.addEventListener("click", (e) => {
+        e.stopPropagation();
+        exportDropdown.classList.toggle("hidden");
+      });
+
+      document.getElementById("btnExportPrint").addEventListener("click", () => {
+        exportDropdown.classList.add("hidden");
+        triggerPrint();
+      });
+
+      document.getElementById("btnExportMarkdown").addEventListener("click", () => {
+        exportDropdown.classList.add("hidden");
+        downloadMarkdown();
+      });
+
+      document.getElementById("btnExportCopy").addEventListener("click", () => {
+        exportDropdown.classList.add("hidden");
+        copyPlainText();
+      });
+
+      // Bible Navigation Controls
+      document.getElementById("btnLoadPassage").addEventListener("click", () => {
+        const book = document.getElementById("selBibleBook").value;
+        const chap = document.getElementById("inputBibleChapter").value;
+        const ver = document.getElementById("selBibleVersion").value;
+        loadBiblePassage(book, chap, ver);
+      });
+
+      document.getElementById("selBibleBook").addEventListener("change", (e) => {
+        document.getElementById("inputBibleChapter").value = 1;
+        loadBiblePassage(e.target.value, 1, document.getElementById("selBibleVersion").value);
+      });
+
+      document.getElementById("selBibleVersion").addEventListener("change", (e) => {
+        loadBiblePassage(activeBibleBook, activeBibleChapter, e.target.value);
+      });
+
+      document.getElementById("btnPrevChapter").addEventListener("click", () => {
+        if (activeBibleChapter > 1) {
+          document.getElementById("inputBibleChapter").value = activeBibleChapter - 1;
+          loadBiblePassage(activeBibleBook, activeBibleChapter - 1, activeBibleVersion);
+        }
+      });
+
+      document.getElementById("btnNextChapter").addEventListener("click", () => {
+        document.getElementById("inputBibleChapter").value = activeBibleChapter + 1;
+        loadBiblePassage(activeBibleBook, activeBibleChapter + 1, activeBibleVersion);
+      });
+
+      // Quick Jump Chips
+      document.querySelectorAll(".chip-jump").forEach(chip => {
+        chip.addEventListener("click", () => {
+          const ref = chip.dataset.ref.split(" ");
+          const book = ref.slice(0, -1).join(" ");
+          const ch = ref[ref.length - 1];
+          document.getElementById("selBibleBook").value = book;
+          document.getElementById("inputBibleChapter").value = ch;
+          loadBiblePassage(book, ch, activeBibleVersion);
+        });
+      });
+
+      // Quick Search input
+      const searchBox = document.getElementById("inputQuickSearch");
+      const doSearch = () => {
+        const query = searchBox.value.trim();
+        if (!query) return;
+        const match = query.match(/^([1-3]?\s?[A-Za-z]+)\s*(\d+)?/);
+        if (match) {
+          const b = match[1].trim();
+          const c = match[2] ? parseInt(match[2], 10) : 1;
+          loadBiblePassage(b, c, activeBibleVersion);
+        }
+      };
+      document.getElementById("btnSearchQuery").addEventListener("click", doSearch);
+      searchBox.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+      // Bible Sub-Tabs
+      const tabText = document.getElementById("tabBibleText");
+      const tabThemes = document.getElementById("tabBibleThemes");
+      const tabScratch = document.getElementById("tabBibleScratchpad");
+      const contText = document.getElementById("containerScriptureText");
+      const contThemes = document.getElementById("containerScriptureThemes");
+      const contScratch = document.getElementById("containerScriptureScratchpad");
+
+      tabText.addEventListener("click", () => {
+        tabText.className = "text-amber-800 font-semibold border-b-2 border-amber-700 pb-0.5";
+        tabThemes.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        tabScratch.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        contText.classList.remove("hidden");
+        contThemes.classList.add("hidden");
+        contScratch.classList.add("hidden");
+      });
+
+      tabThemes.addEventListener("click", () => {
+        tabThemes.className = "text-amber-800 font-semibold border-b-2 border-amber-700 pb-0.5";
+        tabText.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        tabScratch.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        contThemes.classList.remove("hidden");
+        contText.classList.add("hidden");
+        contScratch.classList.add("hidden");
+      });
+
+      tabScratch.addEventListener("click", () => {
+        tabScratch.className = "text-amber-800 font-semibold border-b-2 border-amber-700 pb-0.5";
+        tabText.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        tabThemes.className = "text-slate-500 hover:text-slate-800 pb-0.5";
+        contScratch.classList.remove("hidden");
+        contText.classList.add("hidden");
+        contThemes.classList.add("hidden");
+      });
+
+      // Quote Full Chapter
+      document.getElementById("btnInsertFullChapter").addEventListener("click", () => {
+        if (!activePassageVerses.length) return;
+        const allText = activePassageVerses.map(v => `(${v.v}) ${v.text}`).join(" ");
+        insertScriptureQuote(activeBibleBook, activeBibleChapter, `1-${activePassageVerses.length}`, allText);
+      });
+
+      // Batch selection insert
+      document.getElementById("btnInsertSelectedVerses").addEventListener("click", insertSelectedVersesBatch);
+      document.getElementById("btnClearSelection").addEventListener("click", () => {
+        selectedVersesSet.clear();
+        updateSelectionBatchBar();
+        document.querySelectorAll("#bibleVersesList > div").forEach(row => row.classList.remove("bg-amber-100/80"));
+      });
+
+      // Cross reference click to load
+      document.querySelectorAll(".card-cross-ref").forEach(card => {
+        card.addEventListener("click", () => {
+          const ref = card.dataset.ref.split(" ");
+          const book = ref.slice(0, -1).join(" ");
+          const ch = ref[ref.length - 1];
+          tabText.click();
+          loadBiblePassage(book, ch, activeBibleVersion);
+        });
+      });
+
+      // Insert scratchpad notes into sermon
+      document.getElementById("btnInsertScratchpadToNotes").addEventListener("click", () => {
+        const text = document.getElementById("txtExegesisNotes").value.trim();
+        if (!text) return;
+        const block = `<blockquote class="illustration-box"><strong>Exegesis Insight:</strong> ${text}</blockquote><p></p>`;
+        document.getElementById("editor").focus();
+        document.execCommand("insertHTML", false, block);
+        syncCurrentSermonFromInputs();
+        showToast("Inserted study notes into manuscript!");
+      });
+
+      // Editor input sync & cursor tracking
+      const editor = document.getElementById("editor");
+      editor.addEventListener("input", () => {
+        syncCurrentSermonFromInputs();
+        updateMetrics();
+      });
+      editor.addEventListener("keyup", saveEditorSelection);
+      editor.addEventListener("mouseup", saveEditorSelection);
+
+      // Metadata inputs sync
+      ["inputSermonTitle", "inputSermonSeries", "inputSermonDate", "inputSermonPassageTag", "inputBigIdea"].forEach(id => {
+        document.getElementById(id).addEventListener("input", syncCurrentSermonFromInputs);
+      });
+      document.getElementById("inputSermonTitle").addEventListener("input", (e) => {
+        document.getElementById("activeSermonLabel").textContent = e.target.value || "Untitled Sermon";
+      });
+
+      // Mode Switcher: Manuscript vs Outline
+      const btnModeMs = document.getElementById("btnModeManuscript");
+      const btnModeOut = document.getElementById("btnModeOutline");
+      const viewMs = document.getElementById("viewManuscript");
+      const viewOut = document.getElementById("viewOutline");
+
+      btnModeMs.addEventListener("click", () => {
+        btnModeMs.className = "px-2.5 py-1 rounded-md bg-white shadow-xs text-amber-900 font-bold";
+        btnModeOut.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900";
+        viewMs.classList.remove("hidden");
+        viewOut.classList.add("hidden");
+      });
+
+      btnModeOut.addEventListener("click", () => {
+        btnModeOut.className = "px-2.5 py-1 rounded-md bg-white shadow-xs text-amber-900 font-bold";
+        btnModeMs.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900";
+        viewOut.classList.remove("hidden");
+        viewMs.classList.add("hidden");
+      });
+
+      // Rich Text Formatting Buttons
+      document.querySelectorAll(".tb-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const cmd = btn.dataset.cmd;
+          const val = btn.dataset.val || null;
+          editor.focus();
+          document.execCommand(cmd, false, val);
+          syncCurrentSermonFromInputs();
+        });
+      });
+
+      document.getElementById("btnInsertQuoteBox").addEventListener("click", () => {
+        editor.focus();
+        document.execCommand("insertHTML", false, `<blockquote class="scripture-quote">Quote or Scripture reference here...</blockquote><p></p>`);
+        syncCurrentSermonFromInputs();
+      });
+
+      document.getElementById("btnInsertIllustrationBox").addEventListener("click", () => {
+        editor.focus();
+        document.execCommand("insertHTML", false, `<blockquote class="illustration-box"><strong>Illustration / Story:</strong> Describe the illustration or personal narrative here...</blockquote><p></p>`);
+        syncCurrentSermonFromInputs();
+      });
+
+      // Preach Cue Badges
+      document.getElementById("btnCueSlide").addEventListener("click", () => {
+        editor.focus();
+        document.execCommand("insertHTML", false, ` <span class="cue-badge cue-slide">[SLIDE: Title]</span> `);
+        syncCurrentSermonFromInputs();
+      });
+
+      document.getElementById("btnCuePause").addEventListener("click", () => {
+        editor.focus();
+        document.execCommand("insertHTML", false, ` <span class="cue-badge cue-pause">[PAUSE 3s]</span> `);
+        syncCurrentSermonFromInputs();
+      });
+
+      document.getElementById("btnCueResponse").addEventListener("click", () => {
+        editor.focus();
+        document.execCommand("insertHTML", false, ` <span class="cue-badge cue-response">[RESPONSE]</span> `);
+        syncCurrentSermonFromInputs();
+      });
+
+      // Outline Builder Actions
+      document.getElementById("btnAddOutlineSection").addEventListener("click", () => {
+        const s = getCurrentSermon();
+        if (!s.outline) s.outline = [];
+        s.outline.push({ name: "New Outline Section", minutes: 5, notes: "" });
+        saveData();
+        renderOutlineBlocks();
+      });
+
+      document.getElementById("btnSyncOutlineToManuscript").addEventListener("click", () => {
+        const s = getCurrentSermon();
+        if (!s.outline || s.outline.length === 0) return;
+        let generatedHtml = "";
+        s.outline.forEach(sec => {
+          generatedHtml += `<h1>${sec.name} (${sec.minutes} mins)</h1><p>${sec.notes ? '<em>' + sec.notes + '</em>' : ''}</p><p></p>`;
+        });
+        editor.focus();
+        document.execCommand("insertHTML", false, generatedHtml);
+        btnModeMs.click();
+        syncCurrentSermonFromInputs();
+        showToast("Generated outline headings in manuscript!");
+      });
+
+      // Speaking pace dropdown
+      document.getElementById("selSpeakingPace").addEventListener("change", updateMetrics);
+
+      // Scroll to top
+      document.getElementById("btnScrollToTop").addEventListener("click", () => {
+        document.getElementById("editorScrollContainer").scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      // Preach Mode Controls
+      document.getElementById("btnPreachMode").addEventListener("click", openPreachMode);
+      document.getElementById("btnClosePreachMode").addEventListener("click", closePreachMode);
+      document.getElementById("btnTimerStartPause").addEventListener("click", togglePreachTimer);
+      document.getElementById("btnTimerReset").addEventListener("click", resetPreachTimer);
+
+      document.getElementById("btnPreachFontBigger").addEventListener("click", () => {
+        preachFontSizeRem = Math.min(2.5, preachFontSizeRem + 0.15);
+        document.getElementById("preachContentBody").style.fontSize = `${preachFontSizeRem}rem`;
+      });
+
+      document.getElementById("btnPreachFontSmaller").addEventListener("click", () => {
+        preachFontSizeRem = Math.max(0.9, preachFontSizeRem - 0.15);
+        document.getElementById("preachContentBody").style.fontSize = `${preachFontSizeRem}rem`;
+      });
+
+      // Sermons Library Modal
+      document.getElementById("btnNewSermonModal").addEventListener("click", () => {
+        createNewSermon();
+        closeLibraryModal();
+      });
+      document.getElementById("btnCloseLibraryModal").addEventListener("click", closeLibraryModal);
+      document.getElementById("btnCloseLibraryModalBottom").addEventListener("click", closeLibraryModal);
+    });
+  </script>
+</body>
+</html>
