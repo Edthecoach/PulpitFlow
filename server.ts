@@ -420,7 +420,102 @@ ${rawNotes}`;
     }
   });
 
-  // 6. Multimodal Audio Transcription (gemini-3.5-transcribe)
+  // 6. Scholarly Commentary Excerpts for Active Scripture Passage
+  app.post("/api/gemini/commentaries", async (req, res) => {
+    try {
+      const {
+        passage = "Romans 8:1-17",
+        version = "WEB",
+        versesText = "",
+      } = req.body;
+      const ai = getAiClient();
+
+      const systemInstruction = `You are a distinguished biblical commentary editor and seminary professor.
+Generate 4 concise, high-impact scholarly commentary excerpts for the specified Scripture passage (${passage}).
+Cover these 4 distinct scholarly lenses across the 4 items:
+1. "Exegetical & Lexical" (Grammatical-historical syntax, Hebrew/Greek lexical nuances, literary structure)
+2. "Historical-Cultural" (Ancient Near Eastern or Second Temple / Greco-Roman background and original audience context)
+3. "Historical Theology" (Insights from Patristic, Reformation, or classic orthodox commentators)
+4. "Pastoral & Christological" (Redemptive-historical fulfillment in Christ and homiletical application)
+
+Each item must be concise, substantive, and directly tied to the verses of ${passage}.`;
+
+      const prompt = `Scripture Passage: ${passage} (${version})
+Scripture Text Excerpt:
+${versesText}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              commentaries: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lens: {
+                      type: Type.STRING,
+                      description:
+                        "One of: Exegetical & Lexical, Historical-Cultural, Historical Theology, Pastoral & Christological",
+                    },
+                    scholarOrTradition: {
+                      type: Type.STRING,
+                      description:
+                        "Scholarly tradition or representative commentators (e.g. Reformed / Patristic / Pauline Exegesis)",
+                    },
+                    verseFocus: {
+                      type: Type.STRING,
+                      description: "Specific verse or sub-range within the passage",
+                    },
+                    thesis: {
+                      type: Type.STRING,
+                      description: "Concise headline summarizing the scholarly insight",
+                    },
+                    excerpt: {
+                      type: Type.STRING,
+                      description:
+                        "2-4 sentence scholarly commentary excerpt unpacking the text",
+                    },
+                    lexicalOrContextNote: {
+                      type: Type.STRING,
+                      description:
+                        "1-sentence note on Greek/Hebrew terms, historical setting, or canonical connection",
+                    },
+                  },
+                  required: [
+                    "lens",
+                    "scholarOrTradition",
+                    "verseFocus",
+                    "thesis",
+                    "excerpt",
+                    "lexicalOrContextNote",
+                  ],
+                },
+              },
+            },
+            required: ["commentaries"],
+          },
+        },
+      });
+
+      const rawText = (response.text ?? "{}").trim();
+      const parsed = JSON.parse(rawText);
+      res.json(parsed);
+    } catch (error: any) {
+      console.error("Commentaries generation error:", error);
+      res.status(500).json({
+        error:
+          error?.message || "Failed to fetch scholarly commentaries with Gemini.",
+      });
+    }
+  });
+
+  // 7. Multimodal Audio Transcription (gemini-3.5-transcribe)
   app.post("/api/gemini/transcribe", async (req, res) => {
     try {
       const {

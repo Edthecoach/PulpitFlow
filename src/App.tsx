@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Bookmark,
   BookOpen,
   ChevronDown,
   ChevronLeft,
@@ -42,7 +43,9 @@ import {
 import {
   BIBLE_BOOK_CHAPTERS,
   BIBLE_BOOK_GROUPS,
+  buildScholarlyCommentariesForPassage,
   buildSermonPackageFromPassage,
+  CommentaryExcerpt,
   DEFAULT_SERMONS,
   EMBEDDED_BIBLE,
   getSampleRawNotesForPassage,
@@ -57,6 +60,41 @@ import {
 } from "./data/bibleData";
 
 const STORAGE_KEY = "pulpitflow_sermons_v3";
+const BOOKMARKS_STORAGE_KEY = "pulpitflow_verse_bookmarks_v1";
+
+export interface BookmarkedVerse {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  version: string;
+  text: string;
+  note?: string;
+  createdAt: string;
+}
+
+const DEFAULT_BOOKMARKS: BookmarkedVerse[] = [
+  {
+    id: "Romans-8-1",
+    book: "Romans",
+    chapter: 8,
+    verse: 1,
+    version: "WEB",
+    text: "There is therefore now no condemnation to those who are in Christ Jesus, who don't walk according to the flesh, but according to the Spirit.",
+    note: "Anchor gospel declaration for Romans 8 exposition",
+    createdAt: "2026-11-01",
+  },
+  {
+    id: "Romans-8-28",
+    book: "Romans",
+    chapter: 8,
+    verse: 28,
+    version: "WEB",
+    text: "We know that all things work together for good for those who love God, to those who are called according to his purpose.",
+    note: "Divine providence and covenant assurance",
+    createdAt: "2026-11-01",
+  },
+];
 
 function formatSpokenPunctuation(text: string): string {
   return text
@@ -134,14 +172,34 @@ export default function App() {
   );
   const [isLoadingBible, setIsLoadingBible] = useState<boolean>(false);
   const [quickSearchQuery, setQuickSearchQuery] = useState<string>("");
-  const [bibleTab, setBibleTab] = useState<"reader" | "themes" | "scratchpad">(
-    "reader"
-  );
+  const [bibleTab, setBibleTab] = useState<
+    "reader" | "bookmarks" | "commentaries" | "themes" | "scratchpad"
+  >("reader");
 
   // Verse Range Filter & Selection State (null = All Verses)
   const [verseStartFilter, setVerseStartFilter] = useState<number | null>(1);
   const [verseEndFilter, setVerseEndFilter] = useState<number | null>(17);
   const [filterOnlyRange, setFilterOnlyRange] = useState<boolean>(false);
+
+  // Scholarly Commentaries State for Current Scripture Passage
+  const [passageCommentaries, setPassageCommentaries] = useState<
+    CommentaryExcerpt[]
+  >(() =>
+    buildScholarlyCommentariesForPassage({
+      book: "Romans",
+      chapter: 8,
+      verseStart: 1,
+      verseEnd: 17,
+      verses: EMBEDDED_BIBLE["Romans 8"] || [],
+    })
+  );
+  const [isLoadingCommentaries, setIsLoadingCommentaries] =
+    useState<boolean>(false);
+  const [commentaryLensFilter, setCommentaryLensFilter] =
+    useState<string>("All");
+  const [savedCommentaryIds, setSavedCommentaryIds] = useState<
+    Record<string, boolean>
+  >({});
 
   const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
   const [highlightedVerses, setHighlightedVerses] = useState<
@@ -153,6 +211,19 @@ export default function App() {
     } catch {}
     return {};
   });
+  const [bookmarkedVerses, setBookmarkedVerses] = useState<BookmarkedVerse[]>(
+    () => {
+      try {
+        const saved = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch {}
+      return DEFAULT_BOOKMARKS;
+    }
+  );
+  const [bookmarkFilterQuery, setBookmarkFilterQuery] = useState<string>("");
   const [copiedVerseNum, setCopiedVerseNum] = useState<number | null>(null);
 
   useEffect(() => {
@@ -163,6 +234,43 @@ export default function App() {
       );
     } catch {}
   }, [highlightedVerses]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        BOOKMARKS_STORAGE_KEY,
+        JSON.stringify(bookmarkedVerses)
+      );
+    } catch {}
+  }, [bookmarkedVerses]);
+
+  const toggleVerseBookmark = (
+    book: string,
+    chapter: number,
+    verse: number,
+    text: string,
+    version: string = bibleVersion
+  ) => {
+    const id = `${book}-${chapter}-${verse}`;
+    const exists = bookmarkedVerses.some((b) => b.id === id);
+    if (exists) {
+      setBookmarkedVerses((prev) => prev.filter((b) => b.id !== id));
+      showToast(`Removed bookmark for ${book} ${chapter}:${verse}`);
+    } else {
+      const newEntry: BookmarkedVerse = {
+        id,
+        book,
+        chapter,
+        verse,
+        version,
+        text,
+        note: "",
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      setBookmarkedVerses((prev) => [newEntry, ...prev]);
+      showToast(`Bookmarked ${book} ${chapter}:${verse}`);
+    }
+  };
 
   const setVerseHighlightColor = (
     hlKey: string,
@@ -177,6 +285,128 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  // Sync baseline scholarly commentaries whenever the active Scripture passage or verse range changes
+  useEffect(() => {
+    const localExcerpts = buildScholarlyCommentariesForPassage({
+      book: bibleBook,
+      chapter: bibleChapter,
+      verseStart: verseStartFilter,
+      verseEnd: verseEndFilter,
+      verses: passageVerses,
+    });
+    setPassageCommentaries(localExcerpts);
+  }, [
+    bibleBook,
+    bibleChapter,
+    verseStartFilter,
+    verseEndFilter,
+    passageVerses,
+  ]);
+
+  const fetchScholarlyCommentaries = async () => {
+    const passageRef =
+      verseStartFilter !== null
+        ? `${bibleBook} ${bibleChapter}:${verseStartFilter}${
+            verseEndFilter && verseEndFilter > verseStartFilter
+              ? `-${verseEndFilter}`
+              : ""
+          }`
+        : `${bibleBook} ${bibleChapter}`;
+
+    setIsLoadingCommentaries(true);
+    try {
+      const target =
+        verseStartFilter !== null
+          ? passageVerses.filter(
+              (v) =>
+                v.v >= verseStartFilter &&
+                v.v <=
+                  (verseEndFilter && verseEndFilter >= verseStartFilter
+                    ? verseEndFilter
+                    : verseStartFilter)
+            )
+          : passageVerses;
+      const versesText = (target.length > 0 ? target : passageVerses)
+        .slice(0, 18)
+        .map((v) => `(${v.v}) ${v.text}`)
+        .join(" ");
+
+      const res = await fetch("/api/gemini/commentaries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          passage: passageRef,
+          version: bibleVersion,
+          versesText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error || "Failed to fetch commentaries");
+
+      if (Array.isArray(data.commentaries) && data.commentaries.length > 0) {
+        const mapped: CommentaryExcerpt[] = data.commentaries.map(
+          (item: any, idx: number) => ({
+            id: `ai-comm-${passageRef}-${Date.now()}-${idx}`,
+            lens: item.lens || "Exegetical & Lexical",
+            scholarOrTradition:
+              item.scholarOrTradition || "Scholarly Commentary",
+            verseFocus: item.verseFocus || passageRef,
+            thesis: item.thesis || `Exegetical Insight on ${passageRef}`,
+            excerpt: item.excerpt || "",
+            lexicalOrContextNote: item.lexicalOrContextNote || "",
+          })
+        );
+        setPassageCommentaries(mapped);
+        showToast(`Loaded scholarly commentary excerpts for ${passageRef}`);
+      }
+    } catch {
+      const fallback = buildScholarlyCommentariesForPassage({
+        book: bibleBook,
+        chapter: bibleChapter,
+        verseStart: verseStartFilter,
+        verseEnd: verseEndFilter,
+        verses: passageVerses,
+      });
+      setPassageCommentaries(fallback);
+      showToast(`Displayed scholarly commentary insights for ${passageRef}`);
+    } finally {
+      setIsLoadingCommentaries(false);
+    }
+  };
+
+  const saveCommentaryToScratchpad = (item: CommentaryExcerpt) => {
+    const entryBlock = `[Commentary · ${item.lens} — ${item.verseFocus}]\n${item.thesis} (${item.scholarOrTradition})\n"${item.excerpt}"\nNote: ${item.lexicalOrContextNote}`;
+    const existing = (currentSermon.scratchpad || "").trim();
+    const updated = existing ? `${existing}\n\n${entryBlock}` : entryBlock;
+    updateCurrentSermon({ scratchpad: updated });
+    setSavedCommentaryIds((prev) => ({ ...prev, [item.id]: true }));
+    showToast(`Saved "${item.thesis}" to Exegesis Scratchpad`);
+  };
+
+  const saveAllCommentariesToScratchpad = () => {
+    if (passageCommentaries.length === 0) return;
+    const combinedBlock = passageCommentaries
+      .map(
+        (item) =>
+          `[Commentary · ${item.lens} — ${item.verseFocus}]\n${item.thesis} (${item.scholarOrTradition})\n"${item.excerpt}"\nNote: ${item.lexicalOrContextNote}`
+      )
+      .join("\n\n");
+    const existing = (currentSermon.scratchpad || "").trim();
+    const updated = existing
+      ? `${existing}\n\n${combinedBlock}`
+      : combinedBlock;
+    updateCurrentSermon({ scratchpad: updated });
+    const nextSaved: Record<string, boolean> = { ...savedCommentaryIds };
+    passageCommentaries.forEach((c) => {
+      nextSaved[c.id] = true;
+    });
+    setSavedCommentaryIds(nextSaved);
+    showToast(
+      `Saved all ${passageCommentaries.length} commentary excerpts to Exegesis Scratchpad`
+    );
   };
 
   const bibleReaderScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2058,7 +2288,7 @@ ${transitionHtml}`;
 
             {/* Bible Sub-Tabs & Active Verse Selection Actions */}
             <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 flex-wrap gap-2">
-              <div className="flex items-center gap-4 text-xs font-medium">
+              <div className="flex items-center gap-3.5 text-xs font-medium overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => setBibleTab("reader")}
@@ -2069,6 +2299,33 @@ ${transitionHtml}`;
                   }`}
                 >
                   Scripture Reader
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBibleTab("bookmarks")}
+                  className={`pb-1 transition-colors whitespace-nowrap flex items-center gap-1 ${
+                    bibleTab === "bookmarks"
+                      ? "text-amber-900 font-semibold border-b-2 border-amber-800"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  <span>Bookmarks</span>
+                  <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-amber-100/80 text-amber-900">
+                    {bookmarkedVerses.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBibleTab("commentaries")}
+                  className={`pb-1 transition-colors whitespace-nowrap flex items-center gap-1 ${
+                    bibleTab === "commentaries"
+                      ? "text-amber-900 font-semibold border-b-2 border-amber-800"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Commentaries</span>
                 </button>
                 <button
                   type="button"
@@ -2174,6 +2431,47 @@ ${transitionHtml}`;
                       &times;
                     </button>
                   </div>
+                )}
+
+                {selectedVerses.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      let addedCount = 0;
+                      setBookmarkedVerses((prev) => {
+                        const existingIds = new Set(prev.map((b) => b.id));
+                        const additions: BookmarkedVerse[] = [];
+                        selectedVerses.forEach((vNum) => {
+                          const id = `${bibleBook}-${bibleChapter}-${vNum}`;
+                          const found = passageVerses.find((v) => v.v === vNum);
+                          if (!existingIds.has(id) && found) {
+                            addedCount++;
+                            additions.push({
+                              id,
+                              book: bibleBook,
+                              chapter: bibleChapter,
+                              verse: vNum,
+                              version: bibleVersion,
+                              text: found.text,
+                              note: "",
+                              createdAt: new Date().toISOString().split("T")[0],
+                            });
+                          }
+                        });
+                        return [...additions, ...prev];
+                      });
+                      showToast(
+                        addedCount > 0
+                          ? `Bookmarked ${addedCount} selected verse(s)`
+                          : "Selected verse(s) already bookmarked"
+                      );
+                    }}
+                    className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap"
+                    title="Bookmark selected verses"
+                  >
+                    <Bookmark className="w-3 h-3" />
+                    <span>Bookmark ({selectedVerses.length})</span>
+                  </button>
                 )}
 
                 {selectedVerses.length > 0 && (
@@ -2326,6 +2624,9 @@ ${transitionHtml}`;
                     {displayedVerses.map((v) => {
                       const isSelected = selectedVerses.includes(v.v);
                       const hlKey = `${bibleBook}-${bibleChapter}-${v.v}`;
+                      const isBookmarked = bookmarkedVerses.some(
+                        (b) => b.id === hlKey
+                      );
                       const hlColor = highlightedVerses[hlKey];
                       const highlightClass =
                         hlColor === "yellow"
@@ -2346,24 +2647,59 @@ ${transitionHtml}`;
                               : "hover:bg-amber-100/40"
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedVerses((prev) =>
-                                prev.includes(v.v)
-                                  ? prev.filter((num) => num !== v.v)
-                                  : [...prev, v.v]
-                              )
-                            }
-                            className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded flex-none mt-0.5 select-none transition-colors ${
-                              isSelected
-                                ? "bg-amber-800 text-white"
-                                : "bg-amber-100/80 hover:bg-amber-200 text-amber-900"
-                            }`}
-                            title="Click to select or deselect verse"
-                          >
-                            {v.v}
-                          </button>
+                          <div className="flex items-center gap-1 flex-none mt-0.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedVerses((prev) =>
+                                  prev.includes(v.v)
+                                    ? prev.filter((num) => num !== v.v)
+                                    : [...prev, v.v]
+                                )
+                              }
+                              className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded select-none transition-colors ${
+                                isSelected
+                                  ? "bg-amber-800 text-white"
+                                  : "bg-amber-100/80 hover:bg-amber-200 text-amber-900"
+                              }`}
+                              title="Click to select or deselect verse"
+                            >
+                              {v.v}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleVerseBookmark(
+                                  bibleBook,
+                                  bibleChapter,
+                                  v.v,
+                                  v.text,
+                                  bibleVersion
+                                )
+                              }
+                              className={`p-1 rounded transition-colors ${
+                                isBookmarked
+                                  ? "text-amber-700 bg-amber-100/70 hover:bg-amber-200/70"
+                                  : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-700 hover:bg-amber-50"
+                              }`}
+                              title={
+                                isBookmarked
+                                  ? `Remove bookmark (${bibleBook} ${bibleChapter}:${v.v})`
+                                  : `Bookmark ${bibleBook} ${bibleChapter}:${v.v}`
+                              }
+                              aria-label={
+                                isBookmarked
+                                  ? "Remove verse bookmark"
+                                  : "Bookmark verse"
+                              }
+                            >
+                              <Bookmark
+                                className="w-3.5 h-3.5"
+                                fill={isBookmarked ? "currentColor" : "none"}
+                              />
+                            </button>
+                          </div>
 
                           <span
                             className={`flex-1 leading-relaxed ${highlightClass}`}
@@ -2373,6 +2709,34 @@ ${transitionHtml}`;
 
                           {/* Hover Action Bar */}
                           <div className="hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 shadow-xs px-1.5 py-0.5 rounded-md text-[11px] font-sans flex-none z-10">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleVerseBookmark(
+                                  bibleBook,
+                                  bibleChapter,
+                                  v.v,
+                                  v.text,
+                                  bibleVersion
+                                )
+                              }
+                              className={`px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold whitespace-nowrap ${
+                                isBookmarked
+                                  ? "text-amber-900 bg-amber-100/80 hover:bg-amber-200/80"
+                                  : "text-slate-600 hover:text-amber-900 hover:bg-amber-50"
+                              }`}
+                              title={
+                                isBookmarked
+                                  ? "Remove from Bookmarks"
+                                  : "Save to Bookmarks"
+                              }
+                            >
+                              <Bookmark
+                                className="w-3 h-3"
+                                fill={isBookmarked ? "currentColor" : "none"}
+                              />
+                              <span>{isBookmarked ? "Saved" : "Bookmark"}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() =>
@@ -2481,6 +2845,405 @@ ${transitionHtml}`;
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {bibleTab === "bookmarks" && (
+              <div className="space-y-4 max-w-2xl mx-auto">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <h3 className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                        <Bookmark className="w-4 h-4 text-amber-800" />
+                        <span>Bookmarked Verses</span>
+                        <span className="font-mono text-xs text-slate-500 font-normal">
+                          ({bookmarkedVerses.length})
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Quick-reference verses saved in browser storage for
+                        sermon study and quotation
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={bookmarkFilterQuery}
+                        onChange={(e) => setBookmarkFilterQuery(e.target.value)}
+                        placeholder="Filter bookmarks..."
+                        className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 w-44 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
+                      />
+                      {bookmarkedVerses.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBookmarkedVerses([]);
+                            showToast("Cleared all bookmarked verses");
+                          }}
+                          className="text-xs text-slate-400 hover:text-rose-600 font-medium px-1.5 py-1"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {bookmarkedVerses.length === 0 ? (
+                    <div className="py-10 text-center space-y-2 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                      <Bookmark className="w-6 h-6 text-slate-400 mx-auto" />
+                      <div className="text-xs font-semibold text-slate-700">
+                        No Bookmarked Verses Yet
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        In the <strong>Scripture Reader</strong> tab, click the
+                        bookmark icon next to any verse number to save it here
+                        for quick reference.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("reader")}
+                        className="mt-1 px-3 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold"
+                      >
+                        Go to Scripture Reader
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {bookmarkedVerses
+                        .filter((bm) => {
+                          if (!bookmarkFilterQuery.trim()) return true;
+                          const q = bookmarkFilterQuery.toLowerCase();
+                          const ref =
+                            `${bm.book} ${bm.chapter}:${bm.verse}`.toLowerCase();
+                          return (
+                            ref.includes(q) ||
+                            bm.text.toLowerCase().includes(q) ||
+                            (bm.note || "").toLowerCase().includes(q)
+                          );
+                        })
+                        .map((bm) => {
+                          const refLabel = `${bm.book} ${bm.chapter}:${bm.verse}`;
+                          return (
+                            <div
+                              key={bm.id}
+                              className="p-3.5 rounded-xl bg-slate-50/80 hover:bg-amber-50/40 border border-slate-200/90 transition-colors space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await loadBiblePassage(
+                                      bm.book,
+                                      bm.chapter,
+                                      bm.version || bibleVersion,
+                                      bm.verse,
+                                      bm.verse
+                                    );
+                                    setBibleTab("reader");
+                                    showToast(`Opened ${refLabel}`);
+                                  }}
+                                  className="font-bold text-xs sm:text-sm text-amber-950 hover:text-amber-800 flex items-center gap-1.5"
+                                  title="Open this verse in Scripture Reader"
+                                >
+                                  <Bookmark
+                                    className="w-3.5 h-3.5 text-amber-700"
+                                    fill="currentColor"
+                                  />
+                                  <span>{refLabel}</span>
+                                  <span className="text-[11px] font-mono font-normal text-slate-500">
+                                    ({bm.version || "WEB"})
+                                  </span>
+                                </button>
+
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await loadBiblePassage(
+                                        bm.book,
+                                        bm.chapter,
+                                        bm.version || bibleVersion,
+                                        bm.verse,
+                                        bm.verse
+                                      );
+                                      setBibleTab("reader");
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-medium"
+                                  >
+                                    Open in Reader
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      insertScriptureQuote(
+                                        bm.book,
+                                        bm.chapter,
+                                        bm.verse,
+                                        bm.text
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded bg-amber-100/80 hover:bg-amber-200/80 text-amber-950 text-[11px] font-semibold flex items-center gap-1"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Quote</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const loaded = await loadBiblePassage(
+                                        bm.book,
+                                        bm.chapter,
+                                        bm.version || bibleVersion,
+                                        bm.verse,
+                                        bm.verse
+                                      );
+                                      await syncSermonToChosenScripture({
+                                        book: bm.book,
+                                        chapter: bm.chapter,
+                                        version: bm.version || bibleVersion,
+                                        vStart: bm.verse,
+                                        vEnd: bm.verse,
+                                        versesList: loaded,
+                                        runAiEnrichment: false,
+                                      });
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-[11px] font-semibold"
+                                  >
+                                    Use for Sermon
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setBookmarkedVerses((prev) =>
+                                        prev.filter((item) => item.id !== bm.id)
+                                      );
+                                      showToast(
+                                        `Removed bookmark for ${refLabel}`
+                                      );
+                                    }}
+                                    className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                                    title="Remove bookmark"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <p className="font-serif text-sm text-slate-800 leading-relaxed select-text">
+                                &ldquo;{bm.text}&rdquo;
+                              </p>
+
+                              <input
+                                type="text"
+                                value={bm.note || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBookmarkedVerses((prev) =>
+                                    prev.map((item) =>
+                                      item.id === bm.id
+                                        ? { ...item, note: val }
+                                        : item
+                                    )
+                                  );
+                                }}
+                                placeholder="Add a quick study note or tag for this bookmark..."
+                                className="w-full text-xs bg-white border border-slate-200/80 rounded-lg px-2.5 py-1 text-slate-700 focus:outline-none focus:border-amber-700 select-text"
+                              />
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {bibleTab === "commentaries" && (
+              <div className="space-y-4 max-w-2xl mx-auto">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 space-y-4">
+                  {/* Commentaries Header */}
+                  <div className="flex items-start justify-between gap-3 flex-wrap pb-3 border-b border-slate-100">
+                    <div>
+                      <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-amber-800" />
+                        <span>
+                          Scholarly Commentaries on {activeReferenceBadge}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Concise grammatical-historical, cultural, and
+                        theological insights—save any excerpt directly to your
+                        Exegesis Scratchpad
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={fetchScholarlyCommentaries}
+                        disabled={isLoadingCommentaries}
+                        className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        title="Generate fresh passage-specific scholarly commentary excerpts with Gemini"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {isLoadingCommentaries
+                            ? "Fetching Insights..."
+                            : "AI Refresh Excerpts"}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={saveAllCommentariesToScratchpad}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 text-xs font-semibold transition-colors"
+                      >
+                        Save All to Scratchpad
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lens Filter Bar & Quick Link to Scratchpad */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      {[
+                        "All",
+                        "Exegetical & Lexical",
+                        "Historical-Cultural",
+                        "Historical Theology",
+                        "Pastoral & Christological",
+                      ].map((lens) => (
+                        <button
+                          key={lens}
+                          type="button"
+                          onClick={() => setCommentaryLensFilter(lens)}
+                          className={`px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors ${
+                            commentaryLensFilter === lens
+                              ? "bg-amber-800 text-white border-amber-800 font-semibold"
+                              : "bg-slate-50 hover:bg-amber-50 text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          {lens}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setBibleTab("scratchpad")}
+                      className="text-xs font-semibold text-amber-800 hover:text-amber-950 hover:underline whitespace-nowrap"
+                    >
+                      Open Exegesis Scratchpad &rarr;
+                    </button>
+                  </div>
+
+                  {/* Commentary Excerpt Cards */}
+                  {isLoadingCommentaries ? (
+                    <div className="py-12 text-center text-slate-500 space-y-2">
+                      <div className="w-5 h-5 border-2 border-purple-700 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-xs font-medium">
+                        Fetching scholarly commentary excerpts for{" "}
+                        {activeReferenceBadge}...
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {passageCommentaries
+                        .filter(
+                          (item) =>
+                            commentaryLensFilter === "All" ||
+                            item.lens === commentaryLensFilter
+                        )
+                        .map((item) => {
+                          const isSaved = !!savedCommentaryIds[item.id];
+                          return (
+                            <div
+                              key={item.id}
+                              className="p-4 rounded-xl bg-slate-50/80 hover:bg-amber-50/30 border border-slate-200/90 space-y-2.5 transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded bg-amber-100/90 text-amber-950 border border-amber-200 text-[11px] font-bold">
+                                    {item.lens}
+                                  </span>
+                                  <span className="font-mono text-xs font-bold text-slate-800">
+                                    {item.verseFocus}
+                                  </span>
+                                  <span className="text-[11px] text-slate-500">
+                                    · {item.scholarOrTradition}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      saveCommentaryToScratchpad(item)
+                                    }
+                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                      isSaved
+                                        ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                        : "bg-amber-800 hover:bg-amber-900 text-white"
+                                    }`}
+                                    title="Save this scholarly insight directly to your Exegesis Scratchpad"
+                                  >
+                                    {isSaved ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Saved to Scratchpad</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Save to Scratchpad</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      insertHtmlAtCursor(
+                                        `<blockquote class="illustration-box"><strong>Scholarly Commentary (${item.verseFocus} — ${item.scholarOrTradition}):</strong><br><em>${item.thesis}:</em> ${item.excerpt}</blockquote><p></p>`
+                                      );
+                                      setEditorViewMode("manuscript");
+                                      showToast(
+                                        `Inserted commentary on ${item.verseFocus} into manuscript`
+                                      );
+                                    }}
+                                    className="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-medium"
+                                    title="Insert this commentary excerpt directly into the sermon manuscript"
+                                  >
+                                    Insert in Manuscript
+                                  </button>
+                                </div>
+                              </div>
+
+                              <h4 className="font-display text-sm font-bold text-slate-900">
+                                {item.thesis}
+                              </h4>
+
+                              <p className="font-serif text-sm text-slate-800 leading-relaxed select-text">
+                                {item.excerpt}
+                              </p>
+
+                              {item.lexicalOrContextNote && (
+                                <div className="pt-1.5 border-t border-slate-200/70 text-xs text-slate-600 flex items-center gap-1.5">
+                                  <span className="font-semibold text-amber-900 shrink-0">
+                                    Exegetical Note:
+                                  </span>
+                                  <span className="italic select-text">
+                                    {item.lexicalOrContextNote}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
