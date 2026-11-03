@@ -515,7 +515,91 @@ ${versesText}`;
     }
   });
 
-  // 7. Multimodal Audio Transcription (gemini-3.5-transcribe)
+  // 7. Scripture Context Search by Theme / Topic (Suggest & Link Relevant Passages)
+  app.post("/api/gemini/context-search", async (req, res) => {
+    try {
+      const {
+        topic = "grace",
+        currentPassage = "Romans 8:1-17",
+        sermonTitle = "",
+        bigIdea = "",
+        version = "WEB",
+      } = req.body;
+      const ai = getAiClient();
+
+      const systemInstruction = `You are a biblical theologian and homiletics consultant.
+A pastor is preparing a sermon on ${currentPassage} (Title: "${sermonTitle}", Big Idea: "${bigIdea}") and is searching for relevant biblical passages on the theme or topic: "${topic}".
+Suggest 4 key biblical passages across the Old and New Testaments that illuminate "${topic}" and connect meaningfully to the current sermon.
+For each passage, provide:
+- "reference": Exact book, chapter, and verse(s) (e.g. "2 Corinthians 12:9-10")
+- "book": Exact canonical Bible book name (e.g. "2 Corinthians", "Psalms", "Romans", "Isaiah")
+- "chapter": Chapter number as integer
+- "verseStart": Starting verse number as integer
+- "verseEnd": Ending verse number as integer
+- "quote": Full text of the verse(s) (${version} style)
+- "thematicConnection": 1-2 sentences explaining how this passage illuminates "${topic}" and enriches the pastor's sermon on ${currentPassage}
+- "testamentOrGenre": Genre label (e.g. "Pauline Epistle", "Wisdom & Psalms", "Gospel Narrative", "Prophetic Literature")`;
+
+      const prompt = `Searched Theme / Topic: ${topic}
+Current Sermon Scripture: ${currentPassage}
+Current Sermon Title: ${sermonTitle}
+Current Sermon Big Idea: ${bigIdea}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              passages: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    reference: { type: Type.STRING },
+                    book: { type: Type.STRING },
+                    chapter: { type: Type.INTEGER },
+                    verseStart: { type: Type.INTEGER },
+                    verseEnd: { type: Type.INTEGER },
+                    quote: { type: Type.STRING },
+                    thematicConnection: { type: Type.STRING },
+                    testamentOrGenre: { type: Type.STRING },
+                  },
+                  required: [
+                    "reference",
+                    "book",
+                    "chapter",
+                    "verseStart",
+                    "verseEnd",
+                    "quote",
+                    "thematicConnection",
+                    "testamentOrGenre",
+                  ],
+                },
+              },
+            },
+            required: ["passages"],
+          },
+        },
+      });
+
+      const rawText = (response.text ?? "{}").trim();
+      const parsed = JSON.parse(rawText);
+      res.json(parsed);
+    } catch (error: any) {
+      console.error("Context search error:", error);
+      res.status(500).json({
+        error:
+          error?.message ||
+          "Failed to search Scripture context with Gemini.",
+      });
+    }
+  });
+
+  // 8. Multimodal Audio Transcription (gemini-3.5-transcribe)
   app.post("/api/gemini/transcribe", async (req, res) => {
     try {
       const {

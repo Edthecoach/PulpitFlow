@@ -34,6 +34,18 @@ export interface CommentaryExcerpt {
   lexicalOrContextNote: string;
 }
 
+export interface ContextSearchPassage {
+  id: string;
+  reference: string;
+  book: string;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number;
+  quote: string;
+  thematicConnection: string;
+  testamentOrGenre: string;
+}
+
 export type NotesOrganizationFramework =
   | "expository-flow"
   | "problem-gospel-response"
@@ -1315,5 +1327,171 @@ export function buildScholarlyCommentariesForPassage(params: {
     },
   ];
 }
+
+export function searchScriptureContextByTopic(
+  topic: string,
+  currentPassageTag: string = "Romans 8:1-17"
+): ContextSearchPassage[] {
+  const cleanTopic = (topic || "grace").trim();
+  const lower = cleanTopic.toLowerCase();
+
+  if (lower.includes("suffer") || lower.includes("trial") || lower.includes("pain") || lower.includes("grief")) {
+    return [
+      {
+        id: "ctx-suffering-1",
+        reference: "Romans 8:18",
+        book: "Romans",
+        chapter: 8,
+        verseStart: 18,
+        verseEnd: 18,
+        quote:
+          "For I consider that the sufferings of this present time are not worthy to be compared with the glory which will be revealed toward us.",
+        thematicConnection: `Directly bridges ${currentPassageTag} to eschatological hope—framing present affliction against the weight of future glory.`,
+        testamentOrGenre: "Pauline Epistle",
+      },
+      {
+        id: "ctx-suffering-2",
+        reference: "2 Corinthians 12:9–10",
+        book: "2 Corinthians",
+        chapter: 12,
+        verseStart: 9,
+        verseEnd: 10,
+        quote:
+          "He has said to me, 'My grace is sufficient for you, for my power is made perfect in weakness.'",
+        thematicConnection: `Demonstrates how Christ's sustaining grace meets the believer inside the thorn of suffering rather than merely removing it.`,
+        testamentOrGenre: "Pauline Epistle",
+      },
+      {
+        id: "ctx-suffering-3",
+        reference: "1 Peter 1:6–7",
+        book: "1 Peter",
+        chapter: 1,
+        verseStart: 6,
+        verseEnd: 7,
+        quote:
+          "Wherein you greatly rejoice, though now for a little while, if need be, you have been put to grief in various trials, that the proof of your faith... may be found to result in praise, glory, and honor at the revelation of Jesus Christ.",
+        thematicConnection: `Illustrates the refining purpose of trials—purifying faith like gold rather than destroying the believer.`,
+        testamentOrGenre: "General Epistle",
+      },
+      {
+        id: "ctx-suffering-4",
+        reference: "Psalms 23:4",
+        book: "Psalms",
+        chapter: 23,
+        verseStart: 4,
+        verseEnd: 4,
+        quote:
+          "Even though I walk through the valley of the shadow of death, I will fear no evil, for you are with me. Your rod and your staff, they comfort me.",
+        thematicConnection: `Grounds the sermon's theme of "${cleanTopic}" in the Shepherd's personal presence amid the darkest valleys.`,
+        testamentOrGenre: "Wisdom & Psalms",
+      },
+    ];
+  }
+
+  if (lower.includes("grace") || lower.includes("mercy") || lower.includes("forgiv") || lower.includes("salvation")) {
+    return [
+      {
+        id: "ctx-grace-1",
+        reference: "Ephesians 2:8–10",
+        book: "Ephesians",
+        chapter: 2,
+        verseStart: 8,
+        verseEnd: 10,
+        quote:
+          "For by grace you have been saved through faith, and that not of yourselves; it is the gift of God, not of works, that no one would boast.",
+        thematicConnection: `Reinforces ${currentPassageTag} by showing that salvation from first to last is God's unmerited gift that produces new obedience.`,
+        testamentOrGenre: "Pauline Epistle",
+      },
+      {
+        id: "ctx-grace-2",
+        reference: "Romans 8:1–2",
+        book: "Romans",
+        chapter: 8,
+        verseStart: 1,
+        verseEnd: 2,
+        quote:
+          "There is therefore now no condemnation to those who are in Christ Jesus... For the law of the Spirit of life in Christ Jesus made me free from the law of sin and of death.",
+        thematicConnection: `Anchors the theme of "${cleanTopic}" in the courtroom verdict of justification and liberation by the Spirit.`,
+        testamentOrGenre: "Pauline Epistle",
+      },
+      {
+        id: "ctx-grace-3",
+        reference: "Titus 2:11–12",
+        book: "Titus",
+        chapter: 2,
+        verseStart: 11,
+        verseEnd: 12,
+        quote:
+          "For the grace of God has appeared, bringing salvation to all men, instructing us to the intent that, denying ungodliness and worldly lusts, we would live soberly, righteously, and godly in this present world.",
+        thematicConnection: `Shows that sovereign grace both pardons guilt and pedagogically trains the believer in holy living.`,
+        testamentOrGenre: "Pastoral Epistle",
+      },
+      {
+        id: "ctx-grace-4",
+        reference: "Hebrews 4:16",
+        book: "Hebrews",
+        chapter: 4,
+        verseStart: 16,
+        verseEnd: 16,
+        quote:
+          "Let's therefore draw near with boldness to the throne of grace, that we may receive mercy, and may find grace for help in time of need.",
+        thematicConnection: `Provides a pastoral invitation for the conclusion of your sermon on ${currentPassageTag}.`,
+        testamentOrGenre: "Epistle",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: `ctx-${Date.now()}-1`,
+      reference: "Romans 8:28",
+      book: "Romans",
+      chapter: 8,
+      verseStart: 28,
+      verseEnd: 28,
+      quote:
+        "We know that all things work together for good for those who love God, to those who are called according to his purpose.",
+      thematicConnection: `Connects the theme of "${cleanTopic}" to God's sovereign, covenantal purpose alongside ${currentPassageTag}.`,
+      testamentOrGenre: "Pauline Epistle",
+    },
+    {
+      id: `ctx-${Date.now()}-2`,
+      reference: "John 3:16–17",
+      book: "John",
+      chapter: 3,
+      verseStart: 16,
+      verseEnd: 17,
+      quote:
+        "For God so loved the world, that he gave his one and only Son, that whoever believes in him should not perish, but have eternal life.",
+      thematicConnection: `Centers the theme of "${cleanTopic}" in the Father's redemptive mission and the gift of the Son.`,
+      testamentOrGenre: "Gospel Narrative",
+    },
+    {
+      id: `ctx-${Date.now()}-3`,
+      reference: "Philippians 4:6–7",
+      book: "Philippians",
+      chapter: 4,
+      verseStart: 6,
+      verseEnd: 7,
+      quote:
+        "In nothing be anxious, but in everything, by prayer and petition with thanksgiving, let your requests be made known to God. And the peace of God, which surpasses all understanding, will guard your hearts and your thoughts in Christ Jesus.",
+      thematicConnection: `Applies "${cleanTopic}" to the believer's inner life of prayer, gratitude, and Christ's guarding peace.`,
+      testamentOrGenre: "Pauline Epistle",
+    },
+    {
+      id: `ctx-${Date.now()}-4`,
+      reference: "Psalms 23:1–4",
+      book: "Psalms",
+      chapter: 23,
+      verseStart: 1,
+      verseEnd: 4,
+      quote:
+        "Yahweh is my shepherd: I shall lack nothing. He makes me lie down in green pastures. He leads me beside still waters. He restores my soul.",
+      thematicConnection: `Provides Old Testament covenantal imagery illuminating "${cleanTopic}" in connection with ${currentPassageTag}.`,
+      testamentOrGenre: "Wisdom & Psalms",
+    },
+  ];
+}
+
 
 
