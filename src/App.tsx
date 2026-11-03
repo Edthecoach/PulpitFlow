@@ -518,7 +518,7 @@ export default function App() {
 
   // Right Pane Mode
   const [editorViewMode, setEditorViewMode] = useState<
-    "manuscript" | "organizer" | "outline"
+    "manuscript" | "organizer" | "outline" | "howto"
   >("manuscript");
   const [notesFramework, setNotesFramework] =
     useState<NotesOrganizationFramework>("expository-flow");
@@ -1872,6 +1872,24 @@ ${transitionHtml}`;
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-800" />
             <span>{mobileShowBible ? "Hide Bible" : "Show Bible"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setEditorViewMode((prev) =>
+                prev === "howto" ? "manuscript" : "howto"
+              )
+            }
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              editorViewMode === "howto"
+                ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            title="How To Use PulpitFlow"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-800" />
+            <span>How To Use</span>
           </button>
 
           <button
@@ -3930,6 +3948,18 @@ ${transitionHtml}`;
                 >
                   Outline View
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorViewMode("howto")}
+                  className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${
+                    editorViewMode === "howto"
+                      ? "bg-white shadow-xs text-amber-950 font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-800" />
+                  <span>How To Use</span>
+                </button>
               </div>
             </div>
 
@@ -5045,6 +5075,480 @@ ${transitionHtml}`;
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* How To Use View */}
+            {editorViewMode === "howto" && (
+              <div className="max-w-3xl mx-auto py-8 px-6 sm:px-10 space-y-8">
+                {/* Header Banner */}
+                <div className="p-5 rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/90 via-white to-stone-50 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="space-y-1">
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-900 bg-amber-100/80 px-2.5 py-0.5 rounded-md">
+                        <HelpCircle className="w-3.5 h-3.5 text-amber-800" />
+                        <span>PulpitFlow Studio Guide</span>
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900 tracking-tight font-serif">
+                        How to Navigate &amp; Use PulpitFlow
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl">
+                        PulpitFlow is designed around a unified{" "}
+                        <strong>split-screen workflow</strong>: study Scripture,
+                        commentaries, and theological themes on the{" "}
+                        <strong>Left Pane</strong> while organizing notes,
+                        structuring outlines, and crafting your preaching
+                        manuscript on the <strong>Right Pane</strong>.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditorViewMode("manuscript")}
+                      className="px-3 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold shadow-2xs transition-colors shrink-0"
+                    >
+                      Back to Manuscript
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 1: 4-Step Sermon Preparation Workflow */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      1. Recommended 4-Step Sermon Prep Workflow
+                    </h3>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      From Text to Pulpit
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded font-mono">
+                          STEP 01
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Left Pane · Scripture Bar
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        Select Your Scripture &amp; Sync Sermon
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Choose a <strong>Book, Chapter, and Verse range</strong>{" "}
+                        using the dropdowns or the visual{" "}
+                        <strong>Picker</strong> grid. Click{" "}
+                        <strong>Set as Sermon Text</strong> to automatically
+                        tailor your Title Ideas, Big Idea, Intro Illustration,
+                        and Manuscript to that exact passage.
+                      </p>
+                      <div className="pt-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBibleTab("reader");
+                            setShowPassageGridPicker(true);
+                          }}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Open Passage Grid Picker →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded font-mono">
+                          STEP 02
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Left Pane · Study Tabs
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        Highlight, Bookmark &amp; Research Exegesis
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Click any verse to highlight it in{" "}
+                        <strong>Yellow, Green, or Blue</strong>, bookmark it for
+                        quick reference, run a Greek/Hebrew{" "}
+                        <strong>Word Study</strong>, read{" "}
+                        <strong>Commentaries</strong>, or run a{" "}
+                        <strong>Scripture Context Search</strong> by theme.
+                      </p>
+                      <div className="pt-1 flex items-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setBibleTab("commentaries")}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Open Commentaries →
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBibleTab("scratchpad")}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Open Exegesis &amp; Context Search →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded font-mono">
+                          STEP 03
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Right Pane · Organizer &amp; Editor
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        Organize Raw Notes &amp; Draft Manuscript
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Brain-dump unstructured thoughts in{" "}
+                        <strong>Notes Organizer</strong> and let AI arrange them
+                        into logical preaching order, or write directly in the{" "}
+                        <strong>Manuscript</strong> editor with pulpits cues (
+                        <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                          [PAUSE]
+                        </code>
+                        ,{" "}
+                        <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                          [SLIDE]
+                        </code>
+                        ).
+                      </p>
+                      <div className="pt-1 flex items-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setEditorViewMode("organizer")}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Try Notes Organizer →
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditorViewMode("outline")}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Open Outline View →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded font-mono">
+                          STEP 04
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Top Bar · Delivery &amp; Export
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        Preach Mode Teleprompter &amp; Export
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Launch <strong>Preach Mode</strong> for a high-contrast,
+                        distraction-free pulpit teleprompter with a live timer,
+                        adjustable font size, and auto-scroll, or export your
+                        sermon to Markdown, Plain Text, or Print.
+                      </p>
+                      <div className="pt-1 flex items-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setShowPreachModal(true)}
+                          className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
+                        >
+                          Launch Preach Mode →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Navigating the Left Pane (Scripture & Exegesis Studio) */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    2. Left Pane Guide — Scripture Reader &amp; Exegesis Tabs
+                  </h3>
+
+                  <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 shadow-2xs">
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Scripture Reader &amp; 3-Color Verse Highlighter
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60">
+                            Tab 1
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Click any verse to select it. Use the{" "}
+                          <strong>Highlight toolbar</strong> or hover over a
+                          verse to highlight in{" "}
+                          <span className="px-1.5 py-0.2 rounded bg-amber-200/80 text-amber-950 font-medium">
+                            Yellow
+                          </span>
+                          ,{" "}
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-200/80 text-emerald-950 font-medium">
+                            Green
+                          </span>
+                          , or{" "}
+                          <span className="px-1.5 py-0.2 rounded bg-sky-200/80 text-sky-950 font-medium">
+                            Blue
+                          </span>
+                          . Click <strong>Quote Verse into Sermon</strong> to
+                          insert a formatted block-quote directly at your cursor
+                          position in the manuscript.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("reader")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Reader
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Bookmarks List (Saved in Browser Storage)
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60">
+                            Tab 2
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Click the <strong>Bookmark ribbon icon</strong> on any
+                          verse in the reader to save it for quick reference.
+                          Your bookmarks persist automatically in{" "}
+                          <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                            localStorage
+                          </code>{" "}
+                          so you can jump back to any passage or quote it into
+                          future sermons.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("bookmarks")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Bookmarks
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Scholarly Commentaries
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60">
+                            Tab 3
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Automatically synthesizes concise scholarly commentary
+                          excerpts (Historical/Contextual, Lexical/Grammatical,
+                          and Patristic/Reformed) for your active passage. Click{" "}
+                          <strong>Save to Exegesis Scratchpad</strong> on any
+                          card to capture the insight.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("commentaries")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Commentaries
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Cross-References &amp; Redemptive Themes
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60">
+                            Tab 4
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Explore curated canonical cross-references for your
+                          active chapter and filter verses by theological themes
+                          (Grace, Covenant, Suffering, Kingdom, Spirit).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("themes")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Cross-Refs
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Exegesis Scratchpad &amp; Scripture Context Search
+                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60">
+                            Tab 5
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Type any theme or topic (e.g.,{" "}
+                          <em>&ldquo;suffering&rdquo;</em>,{" "}
+                          <em>&ldquo;grace&rdquo;</em>,{" "}
+                          <em>&ldquo;hope&rdquo;</em>) in{" "}
+                          <strong>Scripture Context Search</strong> to have
+                          Gemini suggest relevant Old &amp; New Testament
+                          passages and link them to your sermon, alongside your
+                          freeform exegetical scratchpad.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("scratchpad")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Scratchpad
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Navigating the Right Pane (Sermon Studio & AI Homiletics) */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    3. Right Pane Guide — Sermon Studio, AI Tools &amp; Audio
+                  </h3>
+
+                  <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 shadow-2xs">
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-slate-900">
+                          Homiletical Approaches (Expository · Textual ·
+                          Topical)
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Switch between <strong>Expository</strong>{" "}
+                          (verse-by-verse progression), <strong>Textual</strong>{" "}
+                          (centered on a specific phrase/clause pivot), and{" "}
+                          <strong>Topical</strong> (thematic synthesis with
+                          supporting scripture tags). Clicking{" "}
+                          <strong>Sync Sermon to [Passage]</strong> regenerates
+                          your title suggestions, Big Idea, intro illustration,
+                          and manuscript for that passage.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("manuscript")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Go to Editor
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-slate-900">
+                          AI Homiletics Assistant Toolbar
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Inside the Manuscript toolbar, use{" "}
+                          <strong>AI Outline</strong> to build a 3-point
+                          expository structure, <strong>Word Study</strong> for
+                          Greek/Hebrew lexical analysis,{" "}
+                          <strong>Illustration</strong> for historical or modern
+                          analogies, and <strong>Polish Note</strong> to refine
+                          transitions for spoken cadence.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("manuscript")}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Use AI Toolbar
+                      </button>
+                    </div>
+
+                    <div className="p-4 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-slate-900">
+                          Voice Dictation &amp; Audio Transcription Studio
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Click <strong>Dictate</strong> in the toolbar for live
+                          microphone speech-to-text straight into your
+                          manuscript, or click{" "}
+                          <strong>Transcribe Studio</strong> to record a voice
+                          memo or upload an audio file for Gemini transcription.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAudioStudioModal(true)}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
+                      >
+                        Open Audio Studio
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Pro Tips & Pulpit Cues Reference */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    4. Quick Reference — Pulpit Cues &amp; Pacing Calculator
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600">
+                    <div className="p-3 rounded-lg bg-white border border-slate-200/80">
+                      <div className="font-mono font-bold text-amber-900 mb-1">
+                        [PAUSE] · [SLIDE] · [RESPONSE]
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Insert delivery cues from the editor toolbar. They stand
+                        out visually in Preach Mode so you never miss a slide
+                        change or dramatic pause.
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-white border border-slate-200/80">
+                      <div className="font-mono font-bold text-amber-900 mb-1">
+                        120 / 140 / 160 WPM Pacing
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Adjust your speaking pace in the bottom status bar to
+                        see your real-time estimated preaching duration update
+                        as you type.
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-white border border-slate-200/80">
+                      <div className="font-mono font-bold text-amber-900 mb-1">
+                        Sermon Series Switcher
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Use the top-left sermon selector dropdown to switch
+                        between sermons in your series or create a new sermon
+                        manuscript at any time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
