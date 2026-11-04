@@ -646,6 +646,79 @@ Current Sermon Big Idea: ${bigIdea}`;
     }
   });
 
+  // 8. Manuscript Text-to-Speech (gemini-3.8-flash-lite-tts)
+  app.post("/api/gemini/tts", async (req, res) => {
+    try {
+      const {
+        text = "",
+        voiceName = "Charon",
+        style = "Warm, clear, articulate pastoral speaker delivering a sermon manuscript at a measured preaching cadence",
+      } = req.body;
+
+      const cleanedText = String(text)
+        .replace(/\[(?:SLIDE|PAUSE[^\]]*|RESPONSE|CONGREGATIONAL[^\]]*)\]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!cleanedText) {
+        return res
+          .status(400)
+          .json({ error: "No manuscript text provided for speech synthesis." });
+      }
+
+      const ai = getAiClient();
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash-lite-tts",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: cleanedText.slice(0, 2400),
+                speechMetadata: {
+                  style,
+                },
+              },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: ["Puck", "Charon", "Kore", "Fenrir", "Zephyr"].includes(
+                  voiceName
+                )
+                  ? voiceName
+                  : "Charon",
+              },
+            },
+          },
+        },
+      });
+
+      const base64Audio =
+        response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+      if (!base64Audio) {
+        return res
+          .status(502)
+          .json({ error: "No audio returned from Gemini TTS model." });
+      }
+
+      return res.json({
+        audioBase64: base64Audio,
+        mimeType: "audio/wav",
+      });
+    } catch (error: any) {
+      console.error("Gemini TTS error:", error);
+      res.status(500).json({
+        error: error?.message || "Failed to synthesize speech with Gemini TTS.",
+      });
+    }
+  });
+
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -40,6 +40,11 @@ import {
   Wand2,
   Layers,
   Link2,
+  Volume2,
+  Square,
+  SkipBack,
+  SkipForward,
+  AlertTriangle,
 } from "lucide-react";
 import {
   BIBLE_BOOK_CHAPTERS,
@@ -518,7 +523,7 @@ export default function App() {
 
   // Right Pane Mode
   const [editorViewMode, setEditorViewMode] = useState<
-    "manuscript" | "organizer" | "outline" | "howto"
+    "manuscript" | "organizer" | "outline" | "features" | "howto"
   >("manuscript");
   const [notesFramework, setNotesFramework] =
     useState<NotesOrganizationFramework>("expository-flow");
@@ -550,6 +555,360 @@ export default function App() {
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const lastCursorRangeRef = useRef<Range | null>(null);
   const isInternalEditorUpdate = useRef<boolean>(false);
+
+  // Manuscript Text-to-Speech (TTS) & Awkward Phrasing Listener State
+  const [showTtsPlayer, setShowTtsPlayer] = useState<boolean>(false);
+  const [isTtsPlaying, setIsTtsPlaying] = useState<boolean>(false);
+  const [isTtsPaused, setIsTtsPaused] = useState<boolean>(false);
+  const [isTtsSynthesizing, setIsTtsSynthesizing] = useState<boolean>(false);
+  const [ttsVoice, setTtsVoice] = useState<
+    "Charon" | "Kore" | "Fenrir" | "Zephyr" | "Puck"
+  >("Charon");
+  const [ttsSpeed, setTtsSpeed] = useState<number>(1.0);
+  const [ttsActiveSectionIndex, setTtsActiveSectionIndex] = useState<number>(0);
+  const [ttsCustomSelectionText, setTtsCustomSelectionText] = useState<
+    string | null
+  >(null);
+  const [ttsPolishingSection, setTtsPolishingSection] =
+    useState<boolean>(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsAbortRef = useRef<boolean>(false);
+
+  interface TtsManuscriptSection {
+    index: number;
+    label: string;
+    rawHtmlText: string;
+    spokenText: string;
+    wordCount: number;
+    awkwardSentences: string[];
+  }
+
+  const parseManuscriptTtsSections = (html: string): TtsManuscriptSection[] => {
+    if (typeof document === "undefined") return [];
+    const container = document.createElement("div");
+    container.innerHTML = html || "";
+
+    const blocks = Array.from(
+      container.querySelectorAll("h1, h2, h3, p, blockquote, li")
+    );
+
+    const rawBlocks: { tag: string; text: string }[] = [];
+    if (blocks.length > 0) {
+      blocks.forEach((el) => {
+        const txt = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (txt) {
+          rawBlocks.push({ tag: el.tagName.toLowerCase(), text: txt });
+        }
+      });
+    } else {
+      const fallbackText = (container.textContent || "").trim();
+      fallbackText
+        .split(/\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((txt) => rawBlocks.push({ tag: "p", text: txt }));
+    }
+
+    return rawBlocks
+      .map((blk, idx) => {
+        const spokenText = blk.text
+          .replace(
+            /\[(?:SLIDE|PAUSE[^\]]*|RESPONSE|CONGREGATIONAL[^\]]*)\]/gi,
+            " "
+          )
+          .replace(/\s+/g, " ")
+          .trim();
+
+        const words = spokenText.split(/\s+/).filter(Boolean);
+        const sentences = spokenText
+          .split(/(?<=[.!?])\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        // Identify sentences that may sound winded or awkward when spoken aloud (>30 words or 4+ commas/semicolons)
+        const awkwardSentences = sentences.filter((s) => {
+          const wCount = s.split(/\s+/).filter(Boolean).length;
+          const clauseCount = (s.match(/[,;—]/g) || []).length;
+          return wCount >= 30 || (wCount >= 22 && clauseCount >= 4);
+        });
+
+        const tagLabel =
+          blk.tag === "h1" || blk.tag === "h2"
+            ? "Heading"
+            : blk.tag === "blockquote"
+            ? "Quote / Illustration"
+            : `Paragraph ${idx + 1}`;
+
+        return {
+          index: idx,
+          label: `${tagLabel}`,
+          rawHtmlText: blk.text,
+          spokenText,
+          wordCount: words.length,
+          awkwardSentences,
+        };
+      })
+      .filter((sec) => sec.spokenText.length > 0);
+  };
+
+  const manuscriptTtsSections = parseManuscriptTtsSections(
+    currentSermon.notes || ""
+  );
+
+  const stopTtsPlayback = () => {
+    ttsAbortRef.current = true;
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.src = "";
+      ttsAudioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsTtsPlaying(false);
+    setIsTtsPaused(false);
+    setIsTtsSynthesizing(false);
+  };
+
+  // Stop TTS if user switches sermons
+  useEffect(() => {
+    stopTtsPlayback();
+    setTtsActiveSectionIndex(0);
+    setTtsCustomSelectionText(null);
+  }, [currentSermonId]);
+
+  const speakWithBrowserFallback = (
+    textToSpeak: string,
+    onEndedCallback: () => void
+  ) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setIsTtsPlaying(false);
+      showToast("Audio playback is not supported in this browser");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.rate = ttsSpeed;
+    utterance.pitch = 0.98;
+    utterance.onend = () => {
+      if (!ttsAbortRef.current) {
+        onEndedCallback();
+      }
+    };
+    utterance.onerror = () => {
+      setIsTtsPlaying(false);
+      setIsTtsPaused(false);
+    };
+    setIsTtsPlaying(true);
+    setIsTtsPaused(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const playManuscriptSectionAtIndex = async (
+    targetIdx: number,
+    customSelection: string | null = null
+  ) => {
+    const sections = parseManuscriptTtsSections(currentSermon.notes || "");
+    if (!customSelection && sections.length === 0) {
+      showToast("Your manuscript is empty — write or generate notes first");
+      return;
+    }
+
+    const boundedIdx = Math.max(
+      0,
+      Math.min(targetIdx, Math.max(0, sections.length - 1))
+    );
+
+    // Stop previous audio before starting new section
+    ttsAbortRef.current = true;
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.src = "";
+      ttsAudioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    ttsAbortRef.current = false;
+    setShowTtsPlayer(true);
+    setTtsActiveSectionIndex(boundedIdx);
+    setTtsCustomSelectionText(customSelection);
+
+    const textToRead = customSelection
+      ? customSelection
+          .replace(
+            /\[(?:SLIDE|PAUSE[^\]]*|RESPONSE|CONGREGATIONAL[^\]]*)\]/gi,
+            " "
+          )
+          .replace(/\s+/g, " ")
+          .trim()
+      : sections[boundedIdx]?.spokenText || "";
+
+    if (!textToRead) {
+      setIsTtsPlaying(false);
+      return;
+    }
+
+    const handleNextWhenFinished = () => {
+      if (ttsAbortRef.current) return;
+      if (!customSelection && boundedIdx + 1 < sections.length) {
+        playManuscriptSectionAtIndex(boundedIdx + 1, null);
+      } else {
+        setIsTtsPlaying(false);
+        setIsTtsPaused(false);
+        showToast("Finished reading manuscript aloud");
+      }
+    };
+
+    setIsTtsSynthesizing(true);
+    setIsTtsPlaying(true);
+    setIsTtsPaused(false);
+
+    try {
+      const res = await fetch("/api/gemini/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: textToRead,
+          voiceName: ttsVoice,
+          style:
+            "Warm, clear, articulate pastoral speaker delivering a sermon manuscript at a measured preaching cadence so the author can hear phrasing and rhythm",
+        }),
+      });
+
+      if (ttsAbortRef.current) return;
+
+      if (!res.ok) {
+        throw new Error("TTS API fallback");
+      }
+      const data = await res.json();
+      if (ttsAbortRef.current) return;
+
+      if (data?.audioBase64) {
+        setIsTtsSynthesizing(false);
+        const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
+        audio.playbackRate = ttsSpeed;
+        ttsAudioRef.current = audio;
+
+        audio.onended = () => {
+          handleNextWhenFinished();
+        };
+        audio.onerror = () => {
+          speakWithBrowserFallback(textToRead, handleNextWhenFinished);
+        };
+
+        await audio.play();
+      } else {
+        setIsTtsSynthesizing(false);
+        speakWithBrowserFallback(textToRead, handleNextWhenFinished);
+      }
+    } catch {
+      if (ttsAbortRef.current) return;
+      setIsTtsSynthesizing(false);
+      speakWithBrowserFallback(textToRead, handleNextWhenFinished);
+    }
+  };
+
+  const handleToggleTtsPlayPause = () => {
+    if (editorViewMode !== "manuscript") {
+      setEditorViewMode("manuscript");
+    }
+
+    if (isTtsPlaying && !isTtsPaused) {
+      // Pause active playback
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+      } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.pause();
+      }
+      setIsTtsPaused(true);
+      return;
+    }
+
+    if (isTtsPlaying && isTtsPaused) {
+      // Resume active playback
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.playbackRate = ttsSpeed;
+        ttsAudioRef.current.play().catch(() => {});
+      } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.resume();
+      }
+      setIsTtsPaused(false);
+      return;
+    }
+
+    // Check if the user has highlighted a specific phrase/paragraph in the editor
+    let selectedEditorText = "";
+    if (typeof window !== "undefined") {
+      const sel = window.getSelection();
+      if (
+        sel &&
+        sel.rangeCount > 0 &&
+        editorRef.current &&
+        editorRef.current.contains(sel.anchorNode)
+      ) {
+        selectedEditorText = sel.toString().trim();
+      }
+    }
+
+    if (selectedEditorText.length >= 12) {
+      showToast("Reading selected manuscript excerpt aloud...");
+      playManuscriptSectionAtIndex(ttsActiveSectionIndex, selectedEditorText);
+    } else {
+      playManuscriptSectionAtIndex(ttsActiveSectionIndex, null);
+    }
+  };
+
+  const handlePolishActiveTtsSection = async () => {
+    const activeSec = manuscriptTtsSections[ttsActiveSectionIndex];
+    if (!activeSec) return;
+
+    setTtsPolishingSection(true);
+    try {
+      const res = await fetch("/api/gemini/polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: activeSec.spokenText,
+          passage: currentSermon.passageTag,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to polish section");
+      const data = await res.json();
+      const rawReply = String(data?.result || "").trim();
+
+      // Replace the raw text inside the manuscript if found, or append smoothed version
+      if (rawReply) {
+        const cleanFeedback = rawReply
+          .replace(/```html|```/g, "")
+          .trim();
+        insertHtmlAtCursor(
+          `<blockquote class="illustration-box"><strong>Smoothed Spoken Cadence (${activeSec.label}):</strong><br/>${cleanFeedback}</blockquote><p></p>`
+        );
+        showToast(`Inserted smoothed cadence suggestion for ${activeSec.label}`);
+      }
+    } catch {
+      // Local cadence-splitting fallback: break long clauses into shorter spoken sentences
+      const smoothed = activeSec.spokenText
+        .replace(/;\s+/g, ". ")
+        .replace(/,\s+(and|but|for|yet|so)\s+/gi, ". $1 ");
+      if (
+        currentSermon.notes &&
+        currentSermon.notes.includes(activeSec.rawHtmlText)
+      ) {
+        const updatedHtml = currentSermon.notes.replace(
+          activeSec.rawHtmlText,
+          smoothed
+        );
+        isInternalEditorUpdate.current = false;
+        updateCurrentSermon({ notes: updatedHtml });
+        showToast(`Smoothed long sentence clauses in ${activeSec.label}`);
+      }
+    } finally {
+      setTtsPolishingSection(false);
+    }
+  };
 
   // Sync editor HTML when switching sermons or when notes are externally updated
   useEffect(() => {
@@ -1872,6 +2231,24 @@ ${transitionHtml}`;
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-800" />
             <span>{mobileShowBible ? "Hide Bible" : "Show Bible"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setEditorViewMode((prev) =>
+                prev === "features" ? "manuscript" : "features"
+              )
+            }
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              editorViewMode === "features"
+                ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            title="Explore All PulpitFlow Features"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-800" />
+            <span>Features</span>
           </button>
 
           <button
@@ -3950,6 +4327,18 @@ ${transitionHtml}`;
                 </button>
                 <button
                   type="button"
+                  onClick={() => setEditorViewMode("features")}
+                  className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${
+                    editorViewMode === "features"
+                      ? "bg-white shadow-xs text-amber-950 font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-800" />
+                  <span>Features</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setEditorViewMode("howto")}
                   className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${
                     editorViewMode === "howto"
@@ -4293,8 +4682,50 @@ ${transitionHtml}`;
               </button>
             </div>
 
-            {/* Voice Dictation, Transcription Studio & AI Homiletics */}
-            <div className="flex items-center gap-1.5">
+            {/* Voice Dictation, TTS Read-Aloud, Transcription Studio & AI Homiletics */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Manuscript Text-to-Speech (Listen / Pause / Stop) */}
+              <div className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50/90 p-0.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handleToggleTtsPlayPause}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    isTtsPlaying && !isTtsPaused
+                      ? "bg-amber-800 text-white"
+                      : "text-amber-950 hover:bg-amber-100"
+                  }`}
+                  title="Listen to your drafted manuscript aloud to check spoken cadence and identify awkward phrasing"
+                >
+                  {isTtsPlaying && !isTtsPaused ? (
+                    <Pause className="w-3.5 h-3.5 fill-current" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5 text-amber-800" />
+                  )}
+                  <span>
+                    {isTtsSynthesizing
+                      ? "Loading Voice..."
+                      : isTtsPlaying && !isTtsPaused
+                      ? "Pause Audio"
+                      : isTtsPlaying && isTtsPaused
+                      ? "Resume Audio"
+                      : "Listen Manuscript"}
+                  </span>
+                </button>
+                {(isTtsPlaying || showTtsPlayer) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopTtsPlayback();
+                      setShowTtsPlayer(false);
+                    }}
+                    className="p-1 rounded hover:bg-amber-200/70 text-amber-900"
+                    title="Stop Audio & Close Listener"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                  </button>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() =>
@@ -4461,6 +4892,325 @@ ${transitionHtml}`;
                     Stop
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Active Manuscript Text-to-Speech (TTS) & Awkward Phrasing Listener */}
+            {showTtsPlayer && editorViewMode === "manuscript" && (
+              <div className="max-w-2xl mx-auto mb-6 rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-800 text-white flex items-center justify-center shrink-0">
+                      <Volume2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                        <span>Manuscript Read-Aloud &amp; Phrasing Check</span>
+                        {ttsCustomSelectionText ? (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-950 text-[10px] font-semibold">
+                            Selected Excerpt
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-white border border-amber-200 text-amber-900 text-[10px] font-mono">
+                            Section {ttsActiveSectionIndex + 1} of{" "}
+                            {Math.max(1, manuscriptTtsSections.length)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Listen to your drafted sermon aloud to catch breathless
+                        clauses, tongue-twisters, or awkward transitions.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Playback Transport Controls */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={
+                        !!ttsCustomSelectionText || ttsActiveSectionIndex <= 0
+                      }
+                      onClick={() =>
+                        playManuscriptSectionAtIndex(
+                          Math.max(0, ttsActiveSectionIndex - 1),
+                          null
+                        )
+                      }
+                      className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700"
+                      title="Previous Paragraph"
+                    >
+                      <SkipBack className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleTtsPlayPause}
+                      className="px-3 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                    >
+                      {isTtsPlaying && !isTtsPaused ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5 fill-current" />
+                          <span>Pause</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>
+                            {isTtsPaused ? "Resume" : "Play Section"}
+                          </span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        !!ttsCustomSelectionText ||
+                        ttsActiveSectionIndex >=
+                          manuscriptTtsSections.length - 1
+                      }
+                      onClick={() =>
+                        playManuscriptSectionAtIndex(
+                          Math.min(
+                            manuscriptTtsSections.length - 1,
+                            ttsActiveSectionIndex + 1
+                          ),
+                          null
+                        )
+                      }
+                      className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700"
+                      title="Next Paragraph"
+                    >
+                      <SkipForward className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopTtsPlayback();
+                        setShowTtsPlayer(false);
+                      }}
+                      className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+                      title="Close Read-Aloud Player"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Voice & Speed Selector Row */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-200/70 flex-wrap text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-[11px] font-semibold text-slate-600">
+                      Voice:
+                    </label>
+                    <select
+                      value={ttsVoice}
+                      onChange={(e) => {
+                        const nextV = e.target.value as
+                          | "Charon"
+                          | "Kore"
+                          | "Fenrir"
+                          | "Zephyr"
+                          | "Puck";
+                        setTtsVoice(nextV);
+                        if (isTtsPlaying) {
+                          setTimeout(() => {
+                            playManuscriptSectionAtIndex(
+                              ttsActiveSectionIndex,
+                              ttsCustomSelectionText
+                            );
+                          }, 50);
+                        }
+                      }}
+                      className="px-2 py-1 rounded-md border border-slate-200 bg-white text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-700"
+                    >
+                      <option value="Charon">Charon (Deep Pastoral)</option>
+                      <option value="Kore">Kore (Warm Articulate)</option>
+                      <option value="Fenrir">Fenrir (Measured Baritone)</option>
+                      <option value="Zephyr">Zephyr (Clear Narrative)</option>
+                      <option value="Puck">Puck (Conversational)</option>
+                    </select>
+
+                    <label className="text-[11px] font-semibold text-slate-600 ml-1">
+                      Pace:
+                    </label>
+                    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
+                      {[0.9, 1.0, 1.15, 1.25].map((spd) => (
+                        <button
+                          key={spd}
+                          type="button"
+                          onClick={() => {
+                            setTtsSpeed(spd);
+                            if (ttsAudioRef.current) {
+                              ttsAudioRef.current.playbackRate = spd;
+                            }
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-mono ${
+                            ttsSpeed === spd
+                              ? "bg-amber-800 text-white font-semibold"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {spd}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {ttsCustomSelectionText && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        playManuscriptSectionAtIndex(ttsActiveSectionIndex, null)
+                      }
+                      className="text-[11px] font-semibold text-amber-900 hover:underline"
+                    >
+                      Switch to Full Manuscript
+                    </button>
+                  )}
+                </div>
+
+                {/* Currently Reading Section Preview & Awkward Phrasing Alert */}
+                {(() => {
+                  const activeSec =
+                    manuscriptTtsSections[ttsActiveSectionIndex];
+                  const previewText =
+                    ttsCustomSelectionText || activeSec?.spokenText || "";
+                  const awkwardList = ttsCustomSelectionText
+                    ? ttsCustomSelectionText
+                        .split(/(?<=[.!?])\s+/)
+                        .filter(
+                          (s) => s.split(/\s+/).filter(Boolean).length >= 30
+                        )
+                    : activeSec?.awkwardSentences || [];
+
+                  return (
+                    <div className="space-y-2.5">
+                      <div className="p-3 rounded-lg bg-white border border-amber-200/80 text-xs text-slate-800 font-serif leading-relaxed">
+                        <div className="flex items-center justify-between mb-1 font-sans">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                            {ttsCustomSelectionText
+                              ? "Reading Highlighted Selection"
+                              : activeSec?.label || "Section"}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {
+                              previewText
+                                .split(/\s+/)
+                                .filter(Boolean).length
+                            }{" "}
+                            words
+                          </span>
+                        </div>
+                        <p className="text-slate-800">{previewText}</p>
+                      </div>
+
+                      {/* Awkward / Long Sentence Warning */}
+                      {awkwardList.length > 0 ? (
+                        <div className="p-3 rounded-lg bg-amber-100/70 border border-amber-300/90 flex items-start justify-between gap-3 flex-wrap">
+                          <div className="flex items-start gap-2 flex-1 min-w-[220px]">
+                            <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                            <div className="space-y-1 text-xs">
+                              <div className="font-semibold text-amber-950">
+                                Potential Awkward or Breathless Phrasing Detected
+                              </div>
+                              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                                This section has {awkwardList.length} long or
+                                clause-heavy sentence
+                                {awkwardList.length > 1 ? "s" : ""} (30+ words)
+                                that may sound winded when spoken from the
+                                pulpit:
+                              </p>
+                              <div className="text-[11px] italic text-amber-950 bg-white/80 px-2.5 py-1.5 rounded border border-amber-200/80">
+                                &ldquo;{awkwardList[0]}&rdquo;
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={ttsPolishingSection}
+                            onClick={handlePolishActiveTtsSection}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 shadow-2xs"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>
+                              {ttsPolishingSection
+                                ? "Smoothing..."
+                                : "Smooth Phrasing with AI"}
+                            </span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-[11px] text-emerald-800 bg-emerald-50/80 border border-emerald-200/70 rounded-lg px-3 py-1.5">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            Spoken cadence looks crisp — sentences in this
+                            section are well-paced for preaching.
+                          </span>
+                          <button
+                            type="button"
+                            disabled={ttsPolishingSection}
+                            onClick={handlePolishActiveTtsSection}
+                            className="text-amber-900 font-semibold hover:underline"
+                          >
+                            {ttsPolishingSection
+                              ? "Polishing..."
+                              : "Polish Section Anyway"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Quick Section Jump Pills */}
+                      {manuscriptTtsSections.length > 1 && (
+                        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5">
+                          {manuscriptTtsSections.map((sec) => {
+                            const hasAwkward = sec.awkwardSentences.length > 0;
+                            const isCurrent =
+                              !ttsCustomSelectionText &&
+                              sec.index === ttsActiveSectionIndex;
+                            return (
+                              <button
+                                key={sec.index}
+                                type="button"
+                                onClick={() =>
+                                  playManuscriptSectionAtIndex(sec.index, null)
+                                }
+                                className={`px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap border flex items-center gap-1 transition-colors ${
+                                  isCurrent
+                                    ? "bg-amber-800 text-white border-amber-800 font-semibold"
+                                    : hasAwkward
+                                    ? "bg-amber-100/80 text-amber-950 border-amber-300 hover:bg-amber-200/70"
+                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                                }`}
+                                title={
+                                  hasAwkward
+                                    ? `${sec.label} (Contains long/complex sentence)`
+                                    : sec.label
+                                }
+                              >
+                                <span>{sec.index + 1}.</span>
+                                <span className="max-w-[95px] truncate">
+                                  {sec.spokenText.slice(0, 22)}...
+                                </span>
+                                {hasAwkward && (
+                                  <AlertTriangle
+                                    className={`w-2.5 h-2.5 ${
+                                      isCurrent
+                                        ? "text-amber-200"
+                                        : "text-amber-700"
+                                    }`}
+                                  />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -5546,6 +6296,540 @@ ${transitionHtml}`;
                         between sermons in your series or create a new sermon
                         manuscript at any time.
                       </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Features Directory View */}
+            {editorViewMode === "features" && (
+              <div className="max-w-3xl mx-auto py-8 px-6 sm:px-10 space-y-8">
+                {/* Features Header Banner */}
+                <div className="p-5 rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/90 via-white to-stone-50 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="space-y-1">
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-900 bg-amber-100/80 px-2.5 py-0.5 rounded-md">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-800" />
+                        <span>Complete Studio Capabilities</span>
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900 tracking-tight font-serif">
+                        PulpitFlow Features &amp; Capabilities
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl">
+                        Explore every tool built into{" "}
+                        <strong>PulpitFlow — Sermon Prep &amp; Scripture Studio</strong>.
+                        Click any feature below to jump directly to that tool in
+                        your workspace.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("howto")}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors"
+                      >
+                        How To Use Guide
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("manuscript")}
+                        className="px-3 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold shadow-2xs transition-colors"
+                      >
+                        Back to Manuscript
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category 1: Scripture Reader & Exegesis Studio */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      1. Scripture Reader &amp; Exegesis Studio (Left Pane)
+                    </h3>
+                    <span className="text-[11px] text-amber-900 font-mono font-semibold">
+                      6 Features
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Grid className="w-3.5 h-3.5 text-amber-800" />
+                            <span>Chapter &amp; Verse Range Picker</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                            66 Books
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Navigate any Book, Chapter, and exact Verse range
+                          using quick dropdowns or the 3-step visual grid
+                          selector, with one-click range isolation.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBibleTab("reader");
+                          setShowPassageGridPicker(true);
+                        }}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Passage Grid Picker →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Highlighter className="w-3.5 h-3.5 text-amber-800" />
+                            <span>3-Color Verse Highlighter</span>
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-300 border border-amber-500" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 border border-emerald-500" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-sky-300 border border-sky-500" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Highlight verses in <strong>Yellow</strong>,{" "}
+                          <strong>Green</strong>, or <strong>Blue</strong>{" "}
+                          directly inside the Bible Reader to color-code themes,
+                          gospel promises, and imperatives.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("reader")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Try Verse Highlighter in Reader →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Bookmark className="w-3.5 h-3.5 text-amber-800" />
+                            <span>Persistent Verse Bookmarks</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/70">
+                            {bookmarkedVerses.length} Saved
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Bookmark key verses from any chapter for rapid
+                          reference. Stored automatically in{" "}
+                          <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                            localStorage
+                          </code>{" "}
+                          with a dedicated Bookmarks sidebar tab.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("bookmarks")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Bookmarks Tab →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <BookOpen className="w-3.5 h-3.5 text-amber-800" />
+                            <span>Scholarly Commentaries Tab</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-200/70">
+                            AI Exegesis
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Fetches concise Historical/Contextual,
+                          Lexical/Grammatical, and Patristic/Reformed scholarly
+                          commentary insights for your active passage and saves
+                          them to your Exegesis Scratchpad.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("commentaries")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Commentaries Tab →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Search className="w-3.5 h-3.5 text-amber-800" />
+                            <span>Scripture Context Search</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-200/70">
+                            Gemini Search
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Type any theological theme or topic (e.g.,{" "}
+                          <em>&ldquo;suffering&rdquo;</em> or{" "}
+                          <em>&ldquo;grace&rdquo;</em>) in the Exegesis pane to
+                          discover and link supporting Old &amp; New Testament
+                          passages to your sermon.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("scratchpad")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Scripture Context Search →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Link2 className="w-3.5 h-3.5 text-amber-800" />
+                            <span>Cross-References &amp; Theme Filters</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                            Canonical Links
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Explore curated canonical cross-references and filter
+                          verses by redemptive-historical themes (Grace,
+                          Covenant, Suffering, Kingdom, Spirit).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBibleTab("themes")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Cross-References &amp; Themes →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category 2: Sermon Manuscript & Homiletics Studio */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      2. Sermon Manuscript &amp; Homiletics Studio (Right Pane)
+                    </h3>
+                    <span className="text-[11px] text-amber-900 font-mono font-semibold">
+                      5 Features
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Wand2 className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Scripture-Synced Sermon Package</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Automatically grounds your{" "}
+                          <strong>Title Suggestions</strong>,{" "}
+                          <strong>Big Idea</strong>,{" "}
+                          <strong>Opening Intro Illustration</strong>, and{" "}
+                          <strong>Full Manuscript</strong> in the exact
+                          Scripture passage you select.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditorViewMode("manuscript");
+                          handleAiGenerateFullSermonFromText();
+                        }}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Generate Sermon from {activeReferenceBadge} →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-amber-800" />
+                          <span>AI Sermon Notes Organizer</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Type or paste unstructured sermon thoughts and let AI
+                          organize them into logical preaching order across 4
+                          homiletical frameworks (Expository, Law &amp; Gospel,
+                          Narrative, 3-Point).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("organizer")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Notes Organizer →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Columns className="w-3.5 h-3.5 text-amber-800" />
+                          <span>
+                            Expository, Textual &amp; Topical Homiletical Modes
+                          </span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Switch seamlessly between Verse-by-Verse Expository,
+                          Textual Pivot Clause, and Topical Multi-Reference
+                          modes with dedicated structure templates.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("manuscript")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Switch Modes in Manuscript View →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Outline Builder &amp; Time Budget View</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Plan sermon movements, allocate minutes per section,
+                          and track total preaching time before stepping into
+                          the pulpit.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditorViewMode("outline")}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Outline View →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category 3: Voice, Text-to-Speech & AI Homiletics */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      3. Text-to-Speech, Voice Studio &amp; AI Homiletics
+                    </h3>
+                    <span className="text-[11px] text-amber-900 font-mono font-semibold">
+                      4 Features
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Volume2 className="w-3.5 h-3.5 text-amber-800" />
+                            <span>
+                              Manuscript Text-to-Speech &amp; Phrasing Check
+                            </span>
+                          </span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-950">
+                            Gemini TTS
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Listen to your drafted manuscript aloud with 5
+                          pastoral voices and variable playback speeds. Flags
+                          breathless 30+ word sentences and smooths awkward
+                          phrasing with AI.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditorViewMode("manuscript");
+                          handleToggleTtsPlayPause();
+                        }}
+                        className="text-xs font-semibold text-amber-900 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Listen to Manuscript Now →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Mic className="w-3.5 h-3.5 text-amber-800" />
+                          <span>
+                            Live Voice Dictation &amp; Audio Transcription Studio
+                          </span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Dictate sermon paragraphs hands-free or record/upload
+                          voice memos for accurate pastoral transcription via{" "}
+                          <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                            gemini-3.5-transcribe
+                          </code>
+                          .
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowTranscribeModal(true)}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Audio Transcription Studio →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Greek &amp; Hebrew Original Language Study</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Generate lexical word studies (transliteration, root
+                          morphology, and theological application) for key terms
+                          in your chosen passage and insert them into your
+                          manuscript.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditorViewMode("manuscript");
+                          handleAiWordStudy();
+                        }}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Run Word Study on {currentSermon.passageTag} →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Lightbulb className="w-3.5 h-3.5 text-amber-800" />
+                          <span>
+                            AI Intro Illustrations &amp; Spoken Cadence Polish
+                          </span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Generate passage-specific opening illustrations,
+                          historical snapshots, and spoken-flow transition
+                          checks at any point in your manuscript.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditorViewMode("manuscript");
+                          handleAiIllustration();
+                        }}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Generate Intro Illustration →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category 4: Pulpit Delivery, Series Library & Export */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      4. Pulpit Delivery, Series Library &amp; Export
+                    </h3>
+                    <span className="text-[11px] text-amber-900 font-mono font-semibold">
+                      3 Features
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Play className="w-3.5 h-3.5 text-amber-800 fill-current" />
+                          <span>Preach Mode Teleprompter</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Distraction-free dark pulpit view with live elapsed
+                          timer, adjustable typography, auto-scroll, and
+                          highlighted stage cues.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowPreachModal(true)}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Launch Preach Mode →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Sermon Series Library</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Manage multiple sermons across preaching series,
+                          duplicate manuscripts, or start a fresh sermon from
+                          any Bible passage.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowLibraryModal(true)}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Open Sermon Library →
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Download className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Markdown, Clipboard &amp; Print Export</span>
+                        </span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Export your complete sermon manuscript, Big Idea, and
+                          Scripture metadata to Markdown (
+                          <code className="font-mono text-[11px] bg-slate-100 px-1 rounded">
+                            .md
+                          </code>
+                          ), Plain Text, or Print.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDownloadMarkdown}
+                        className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
+                      >
+                        Export Markdown (.md) →
+                      </button>
                     </div>
                   </div>
                 </div>
