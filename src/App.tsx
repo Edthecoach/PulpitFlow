@@ -51,6 +51,7 @@ import {
   BIBLE_BOOK_GROUPS,
   buildScholarlyCommentariesForPassage,
   buildSermonPackageFromPassage,
+  buildVerseSpecificCommentary,
   CommentaryExcerpt,
   ContextSearchPassage,
   DEFAULT_SERMONS,
@@ -64,11 +65,51 @@ import {
   QUICK_JUMP_REFS,
   searchScriptureContextByTopic,
   SermonDocument,
+  VerseCommentaryNote,
   VerseItem,
 } from "./data/bibleData";
 
 const STORAGE_KEY = "pulpitflow_sermons_v3";
 const BOOKMARKS_STORAGE_KEY = "pulpitflow_verse_bookmarks_v1";
+const ACTIVE_PASSAGE_STORAGE_KEY = "pulpitflow_active_passage_v1";
+const BIBLE_SCROLL_STORAGE_KEY = "pulpitflow_bible_scroll_positions_v1";
+const VERSE_NOTES_STORAGE_KEY = "pulpitflow_personal_verse_notes_v1";
+
+function formatPassageReference(
+  book: string,
+  chapter: number,
+  vStart: number | null,
+  vEnd: number | null
+): string {
+  if (vStart === null) {
+    return `${book} ${chapter}`;
+  }
+  const cleanEnd = vEnd !== null && vEnd > vStart ? `-${vEnd}` : "";
+  return `${book} ${chapter}:${vStart}${cleanEnd}`;
+}
+
+function parseReferenceParts(refStr: string): {
+  book: string;
+  chapter: number;
+  vStart: number | null;
+  vEnd: number | null;
+} | null {
+  const trimmed = (refStr || "").trim();
+  const match = trimmed.match(
+    /^([1-3]?\s?[A-Za-z\s]+?)\s*(\d+)(?::(\d+)(?:[-–](\d+))?)?$/
+  );
+  if (!match) return null;
+  const rawBook = match[1].trim();
+  const ch = parseInt(match[2], 10) || 1;
+  const vStart = match[3] ? parseInt(match[3], 10) : null;
+  const vEnd = match[4] ? parseInt(match[4], 10) : vStart;
+  const allBooks = BIBLE_BOOK_GROUPS.flatMap((g) => g.books);
+  const matchedBook =
+    allBooks.find((b) => b.toLowerCase() === rawBook.toLowerCase()) ||
+    allBooks.find((b) => b.toLowerCase().startsWith(rawBook.toLowerCase())) ||
+    rawBook;
+  return { book: matchedBook, chapter: ch, vStart, vEnd };
+}
 
 export interface BookmarkedVerse {
   id: string;
@@ -158,6 +199,7 @@ export default function App() {
 
   // Dropdowns & Modals
   const [showSermonMenu, setShowSermonMenu] = useState<boolean>(false);
+  const [showQuickJumpMenu, setShowQuickJumpMenu] = useState<boolean>(false);
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [showAiMenu, setShowAiMenu] = useState<boolean>(false);
   const [showLibraryModal, setShowLibraryModal] = useState<boolean>(false);
@@ -171,12 +213,62 @@ export default function App() {
     "book" | "chapter" | "verse"
   >("chapter");
 
+  // Initial Active Passage Resolution (from localStorage or currentSermon.passageTag)
+  const initialPassageConfig = (() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_PASSAGE_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.book && parsed.chapter) {
+          return {
+            book: String(parsed.book),
+            chapter: Number(parsed.chapter) || 1,
+            version: String(parsed.version || "WEB"),
+            vStart:
+              parsed.vStart !== undefined && parsed.vStart !== null
+                ? Number(parsed.vStart)
+                : null,
+            vEnd:
+              parsed.vEnd !== undefined && parsed.vEnd !== null
+                ? Number(parsed.vEnd)
+                : null,
+          };
+        }
+      }
+    } catch {}
+    const fromSermon = parseReferenceParts(currentSermon?.passageTag || "");
+    if (fromSermon) {
+      return {
+        book: fromSermon.book,
+        chapter: fromSermon.chapter,
+        version: "WEB",
+        vStart: fromSermon.vStart,
+        vEnd: fromSermon.vEnd,
+      };
+    }
+    return {
+      book: "Romans",
+      chapter: 8,
+      version: "WEB",
+      vStart: 1 as number | null,
+      vEnd: 17 as number | null,
+    };
+  })();
+
   // Bible Reader State
-  const [bibleBook, setBibleBook] = useState<string>("Romans");
-  const [bibleChapter, setBibleChapter] = useState<number>(8);
-  const [bibleVersion, setBibleVersion] = useState<string>("WEB");
+  const [bibleBook, setBibleBook] = useState<string>(initialPassageConfig.book);
+  const [bibleChapter, setBibleChapter] = useState<number>(
+    initialPassageConfig.chapter
+  );
+  const [bibleVersion, setBibleVersion] = useState<string>(
+    initialPassageConfig.version
+  );
   const [passageVerses, setPassageVerses] = useState<VerseItem[]>(
-    EMBEDDED_BIBLE["Romans 8"] || []
+    EMBEDDED_BIBLE[
+      `${initialPassageConfig.book} ${initialPassageConfig.chapter}`
+    ] ||
+      EMBEDDED_BIBLE["Romans 8"] ||
+      []
   );
   const [isLoadingBible, setIsLoadingBible] = useState<boolean>(false);
   const [quickSearchQuery, setQuickSearchQuery] = useState<string>("");
@@ -185,9 +277,23 @@ export default function App() {
   >("reader");
 
   // Verse Range Filter & Selection State (null = All Verses)
-  const [verseStartFilter, setVerseStartFilter] = useState<number | null>(1);
-  const [verseEndFilter, setVerseEndFilter] = useState<number | null>(17);
+  const [verseStartFilter, setVerseStartFilter] = useState<number | null>(
+    initialPassageConfig.vStart
+  );
+  const [verseEndFilter, setVerseEndFilter] = useState<number | null>(
+    initialPassageConfig.vEnd
+  );
   const [filterOnlyRange, setFilterOnlyRange] = useState<boolean>(false);
+
+  // Refs to prevent stale async fetches from reverting Book/Chapter/Verse selections
+  const latestPassageRequestIdRef = useRef<number>(0);
+  const activeVerseRangeRef = useRef<{
+    start: number | null;
+    end: number | null;
+  }>({
+    start: initialPassageConfig.vStart,
+    end: initialPassageConfig.vEnd,
+  });
 
   // Scholarly Commentaries State for Current Scripture Passage
   const [passageCommentaries, setPassageCommentaries] = useState<
@@ -242,6 +348,46 @@ export default function App() {
   );
   const [bookmarkFilterQuery, setBookmarkFilterQuery] = useState<string>("");
   const [copiedVerseNum, setCopiedVerseNum] = useState<number | null>(null);
+
+  // Granular Verse-Specific Commentary Popover State
+  const [activeVersePopoverNum, setActiveVersePopoverNum] = useState<
+    number | null
+  >(null);
+  const [verseCommentaryCache, setVerseCommentaryCache] = useState<
+    Record<string, VerseCommentaryNote>
+  >({});
+  const [loadingVerseCommentaryKey, setLoadingVerseCommentaryKey] = useState<
+    string | null
+  >(null);
+  const [savedVerseCommentaryKeys, setSavedVerseCommentaryKeys] = useState<
+    Record<string, boolean>
+  >({});
+  const [personalVerseNotes, setPersonalVerseNotes] = useState<
+    Record<string, string>
+  >(() => {
+    try {
+      const saved = localStorage.getItem(VERSE_NOTES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        VERSE_NOTES_STORAGE_KEY,
+        JSON.stringify(personalVerseNotes)
+      );
+    } catch {}
+  }, [personalVerseNotes]);
+
+  // Close verse commentary popover when switching Book or Chapter
+  useEffect(() => {
+    setActiveVersePopoverNum(null);
+  }, [bibleBook, bibleChapter]);
 
   useEffect(() => {
     try {
@@ -426,6 +572,145 @@ export default function App() {
     );
   };
 
+  // Get or build granular verse-specific commentary note for a single verse
+  const getVerseCommentaryNote = (
+    book: string,
+    chapter: number,
+    verse: number,
+    verseText: string
+  ): VerseCommentaryNote => {
+    const cacheKey = `${book} ${chapter}:${verse}`;
+    if (verseCommentaryCache[cacheKey]) {
+      return verseCommentaryCache[cacheKey];
+    }
+    return buildVerseSpecificCommentary({
+      book,
+      chapter,
+      verse,
+      verseText,
+      surroundingVerses: passageVerses,
+    });
+  };
+
+  // Fetch AI-enriched granular single-verse commentary from Gemini
+  const fetchSingleVerseCommentary = async (
+    book: string,
+    chapter: number,
+    verse: number,
+    verseText: string
+  ) => {
+    const cacheKey = `${book} ${chapter}:${verse}`;
+    setLoadingVerseCommentaryKey(cacheKey);
+    try {
+      const surroundingContext = passageVerses
+        .filter((v) => Math.abs(v.v - verse) <= 3)
+        .map((v) => `(${v.v}) ${v.text}`)
+        .join(" ");
+
+      const res = await fetch("/api/gemini/verse-commentary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          book,
+          chapter,
+          verse,
+          version: bibleVersion,
+          verseText,
+          surroundingContext,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed verse commentary");
+
+      const enriched: VerseCommentaryNote = {
+        reference: cacheKey,
+        book,
+        chapter,
+        verse,
+        headline:
+          data.headline || `Granular Exegetical Focus on ${cacheKey}`,
+        exegeticalNote:
+          data.exegeticalNote ||
+          buildVerseSpecificCommentary({
+            book,
+            chapter,
+            verse,
+            verseText,
+            surroundingVerses: passageVerses,
+          }).exegeticalNote,
+        keyTerm:
+          data.keyTerm ||
+          buildVerseSpecificCommentary({
+            book,
+            chapter,
+            verse,
+            verseText,
+            surroundingVerses: passageVerses,
+          }).keyTerm,
+        crossReferences:
+          Array.isArray(data.crossReferences) &&
+          data.crossReferences.length > 0
+            ? data.crossReferences
+            : ["Romans 8:28", "John 15:5"],
+        preachingAngle:
+          data.preachingAngle ||
+          "Drive home the theological assurance of this verse in pastoral application.",
+        source: "ai",
+      };
+
+      setVerseCommentaryCache((prev) => ({
+        ...prev,
+        [cacheKey]: enriched,
+      }));
+      showToast(`Generated granular AI verse exegesis for ${cacheKey}`);
+    } catch {
+      const fallback = buildVerseSpecificCommentary({
+        book,
+        chapter,
+        verse,
+        verseText,
+        surroundingVerses: passageVerses,
+      });
+      setVerseCommentaryCache((prev) => ({
+        ...prev,
+        [cacheKey]: fallback,
+      }));
+      showToast(`Loaded scholarly verse commentary for ${cacheKey}`);
+    } finally {
+      setLoadingVerseCommentaryKey(null);
+    }
+  };
+
+  const saveVerseCommentaryToScratchpad = (
+    note: VerseCommentaryNote,
+    verseText: string
+  ) => {
+    const personalNote = (personalVerseNotes[note.reference] || "").trim();
+    const blockLines = [
+      `[Verse Exegesis · ${note.reference} (${bibleVersion})]`,
+      `"${verseText}"`,
+      `Headline: ${note.headline}`,
+      `Exegesis: ${note.exegeticalNote}`,
+      `Key Term: ${note.keyTerm}`,
+      `Preaching Angle: ${note.preachingAngle}`,
+      note.crossReferences.length > 0
+        ? `Cross-Refs: ${note.crossReferences.join(", ")}`
+        : "",
+      personalNote ? `Pastor's Verse Note: ${personalNote}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const existing = (currentSermon.scratchpad || "").trim();
+    const updated = existing ? `${existing}\n\n${blockLines}` : blockLines;
+    updateCurrentSermon({ scratchpad: updated });
+    setSavedVerseCommentaryKeys((prev) => ({
+      ...prev,
+      [note.reference]: true,
+    }));
+    showToast(`Saved ${note.reference} verse commentary to Exegesis Scratchpad`);
+  };
+
   // Scripture Context Search Handler (Gemini AI + Local Fallback)
   const handleScriptureContextSearch = async (topicOverride?: string) => {
     const query = (
@@ -520,6 +805,62 @@ export default function App() {
   };
 
   const bibleReaderScrollRef = useRef<HTMLDivElement | null>(null);
+  const isRestoringBibleScrollRef = useRef<boolean>(false);
+  const bibleChapterScrollPositionsRef = useRef<Record<string, number>>((() => {
+    try {
+      const saved = localStorage.getItem(BIBLE_SCROLL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch {}
+    return {};
+  })());
+
+  const saveCurrentBibleChapterScroll = (
+    bookName: string = bibleBook,
+    chNum: number = bibleChapter
+  ) => {
+    if (
+      bibleTab !== "reader" ||
+      !bibleReaderScrollRef.current ||
+      isRestoringBibleScrollRef.current
+    ) {
+      return;
+    }
+    const key = `${bookName} ${chNum}`;
+    const top = bibleReaderScrollRef.current.scrollTop;
+    bibleChapterScrollPositionsRef.current[key] = top;
+    try {
+      localStorage.setItem(
+        BIBLE_SCROLL_STORAGE_KEY,
+        JSON.stringify(bibleChapterScrollPositionsRef.current)
+      );
+    } catch {}
+  };
+
+  const restoreBibleChapterScrollPosition = (refKey: string) => {
+    const savedTop = bibleChapterScrollPositionsRef.current[refKey] ?? 0;
+    isRestoringBibleScrollRef.current = true;
+    window.requestAnimationFrame(() => {
+      if (bibleReaderScrollRef.current) {
+        bibleReaderScrollRef.current.scrollTop = savedTop;
+      }
+      window.setTimeout(() => {
+        if (bibleReaderScrollRef.current) {
+          bibleReaderScrollRef.current.scrollTop = savedTop;
+        }
+        isRestoringBibleScrollRef.current = false;
+      }, 75);
+    });
+  };
+
+  // Restore saved chapter scroll position when returning to the Scripture Reader tab
+  useEffect(() => {
+    if (bibleTab === "reader") {
+      restoreBibleChapterScrollPosition(`${bibleBook} ${bibleChapter}`);
+    }
+  }, [bibleTab]);
 
   // Right Pane Mode
   const [editorViewMode, setEditorViewMode] = useState<
@@ -534,7 +875,9 @@ export default function App() {
   const [newTopicalRef, setNewTopicalRef] = useState<string>("");
   const [speakingPace, setSpeakingPace] = useState<number>(140);
   const [showTitleSuggestions, setShowTitleSuggestions] =
-    useState<boolean>(true);
+    useState<boolean>(false);
+  const [showSermonSetupDetails, setShowSermonSetupDetails] =
+    useState<boolean>(false);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -985,12 +1328,50 @@ export default function App() {
     }, 80);
   };
 
+  // Persist active Scripture selection and keep currentSermon.passageTag synchronized
+  useEffect(() => {
+    const newRefTag = formatPassageReference(
+      bibleBook,
+      bibleChapter,
+      verseStartFilter,
+      verseEndFilter
+    );
+    try {
+      localStorage.setItem(
+        ACTIVE_PASSAGE_STORAGE_KEY,
+        JSON.stringify({
+          book: bibleBook,
+          chapter: bibleChapter,
+          version: bibleVersion,
+          vStart: verseStartFilter,
+          vEnd: verseEndFilter,
+        })
+      );
+    } catch {}
+
+    setSermons((prev) =>
+      prev.map((s) =>
+        s.id === currentSermonId && s.passageTag !== newRefTag
+          ? { ...s, passageTag: newRefTag }
+          : s
+      )
+    );
+  }, [
+    bibleBook,
+    bibleChapter,
+    bibleVersion,
+    verseStartFilter,
+    verseEndFilter,
+  ]);
+
   // Apply a verse or verse range selection
   const applyVerseRangeSelection = (
     startV: number | null,
     endV: number | null,
-    versesList: VerseItem[] = passageVerses
+    versesList: VerseItem[] = passageVerses,
+    shouldScrollToVerse: boolean = true
   ) => {
+    activeVerseRangeRef.current = { start: startV, end: endV };
     setVerseStartFilter(startV);
     setVerseEndFilter(endV);
 
@@ -1005,7 +1386,9 @@ export default function App() {
       .filter((v) => v.v >= startV && v.v <= effectiveEnd)
       .map((v) => v.v);
     setSelectedVerses(rangeNums);
-    scrollToVerseElement(startV);
+    if (shouldScrollToVerse) {
+      scrollToVerseElement(startV);
+    }
   };
 
   // Load Bible Passage (Chapter + Optional Verse Range)
@@ -1016,16 +1399,30 @@ export default function App() {
     targetVerseStart: number | null = null,
     targetVerseEnd: number | null = null
   ): Promise<VerseItem[]> => {
+    const requestId = ++latestPassageRequestIdRef.current;
     const maxCh = BIBLE_BOOK_CHAPTERS[book] || 150;
     const cleanChapter = Math.min(maxCh, Math.max(1, chapter || 1));
+
+    // Save current Book/Chapter scroll offset before switching away
+    if (bibleBook !== book || bibleChapter !== cleanChapter) {
+      saveCurrentBibleChapterScroll(bibleBook, bibleChapter);
+    }
+
+    const refKey = `${book} ${cleanChapter}`;
+    const hasSavedScrollForChapter =
+      bibleChapterScrollPositionsRef.current[refKey] !== undefined &&
+      bibleChapterScrollPositionsRef.current[refKey] > 0;
+
+    activeVerseRangeRef.current = {
+      start: targetVerseStart,
+      end: targetVerseEnd,
+    };
     setBibleBook(book);
     setBibleChapter(cleanChapter);
     setBibleVersion(version);
     setSelectedVerses([]);
     setVerseStartFilter(targetVerseStart);
     setVerseEndFilter(targetVerseEnd);
-
-    const refKey = `${book} ${cleanChapter}`;
 
     // Show embedded immediately if available while fetching full chapter
     if (EMBEDDED_BIBLE[refKey]) {
@@ -1034,8 +1431,12 @@ export default function App() {
         applyVerseRangeSelection(
           targetVerseStart,
           targetVerseEnd ?? targetVerseStart,
-          EMBEDDED_BIBLE[refKey]
+          EMBEDDED_BIBLE[refKey],
+          !hasSavedScrollForChapter
         );
+      }
+      if (targetVerseStart === null || hasSavedScrollForChapter) {
+        restoreBibleChapterScrollPosition(refKey);
       }
     }
 
@@ -1047,6 +1448,12 @@ export default function App() {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Lookup failed");
       const data = await res.json();
+
+      // Ignore stale response if the user selected another Book/Chapter while fetching
+      if (requestId !== latestPassageRequestIdRef.current) {
+        return [];
+      }
+
       if (data?.verses?.length > 0) {
         const loaded: VerseItem[] = data.verses.map((v: any) => ({
           v: Number(v.verse),
@@ -1054,12 +1461,18 @@ export default function App() {
         }));
         setPassageVerses(loaded);
         setIsLoadingBible(false);
-        if (targetVerseStart !== null) {
+        const currentStart = activeVerseRangeRef.current.start;
+        const currentEnd = activeVerseRangeRef.current.end;
+        if (currentStart !== null) {
           applyVerseRangeSelection(
-            targetVerseStart,
-            targetVerseEnd ?? targetVerseStart,
-            loaded
+            currentStart,
+            currentEnd ?? currentStart,
+            loaded,
+            !hasSavedScrollForChapter
           );
+        }
+        if (currentStart === null || hasSavedScrollForChapter) {
+          restoreBibleChapterScrollPosition(refKey);
         }
         return loaded;
       }
@@ -1067,16 +1480,27 @@ export default function App() {
       // Fallback to embedded or synthesized chapter
     }
 
+    if (requestId !== latestPassageRequestIdRef.current) {
+      return [];
+    }
+
     setIsLoadingBible(false);
+    const currentStart = activeVerseRangeRef.current.start;
+    const currentEnd = activeVerseRangeRef.current.end;
+
     if (EMBEDDED_BIBLE[refKey]) {
       const fallback = EMBEDDED_BIBLE[refKey];
       setPassageVerses(fallback);
-      if (targetVerseStart !== null) {
+      if (currentStart !== null) {
         applyVerseRangeSelection(
-          targetVerseStart,
-          targetVerseEnd ?? targetVerseStart,
-          fallback
+          currentStart,
+          currentEnd ?? currentStart,
+          fallback,
+          !hasSavedScrollForChapter
         );
+      }
+      if (currentStart === null || hasSavedScrollForChapter) {
+        restoreBibleChapterScrollPosition(refKey);
       }
       return fallback;
     } else {
@@ -1091,20 +1515,30 @@ export default function App() {
         };
       });
       setPassageVerses(synthesized);
-      if (targetVerseStart !== null) {
+      if (currentStart !== null) {
         applyVerseRangeSelection(
-          targetVerseStart,
-          targetVerseEnd ?? targetVerseStart,
-          synthesized
+          currentStart,
+          currentEnd ?? currentStart,
+          synthesized,
+          !hasSavedScrollForChapter
         );
+      }
+      if (currentStart === null || hasSavedScrollForChapter) {
+        restoreBibleChapterScrollPosition(refKey);
       }
       return synthesized;
     }
   };
 
-  // Load full Romans 8 on initial mount
+  // Load initial/persisted passage on mount (never overwrite with hardcoded Romans 8:1-17)
   useEffect(() => {
-    loadBiblePassage("Romans", 8, "WEB", 1, 17);
+    loadBiblePassage(
+      initialPassageConfig.book,
+      initialPassageConfig.chapter,
+      initialPassageConfig.version,
+      initialPassageConfig.vStart,
+      initialPassageConfig.vEnd
+    );
   }, []);
 
   /**
@@ -2079,6 +2513,7 @@ ${transitionHtml}`;
       className="h-full bg-slate-50 text-slate-800 flex flex-col font-sans overflow-hidden select-none"
       onClick={() => {
         setShowSermonMenu(false);
+        setShowQuickJumpMenu(false);
         setShowExportMenu(false);
         setShowAiMenu(false);
         setShowGridPicker(false);
@@ -2183,11 +2618,11 @@ ${transitionHtml}`;
         </div>
 
         {/* Center: Split Layout Ratio Controls */}
-        <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 shrink-0">
+        <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 shrink-0">
           <button
             type="button"
             onClick={() => setBibleSplitPercent(65)}
-            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
               bibleSplitPercent === 65
                 ? "bg-white shadow-xs text-amber-900 font-semibold"
                 : "text-slate-600 hover:text-slate-900"
@@ -2199,7 +2634,7 @@ ${transitionHtml}`;
           <button
             type="button"
             onClick={() => setBibleSplitPercent(50)}
-            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
               bibleSplitPercent === 50
                 ? "bg-white shadow-xs text-amber-900 font-semibold"
                 : "text-slate-600 hover:text-slate-900"
@@ -2211,7 +2646,7 @@ ${transitionHtml}`;
           <button
             type="button"
             onClick={() => setBibleSplitPercent(35)}
-            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
               bibleSplitPercent === 35
                 ? "bg-white shadow-xs text-amber-900 font-semibold"
                 : "text-slate-600 hover:text-slate-900"
@@ -2220,6 +2655,21 @@ ${transitionHtml}`;
             <Columns className="w-3.5 h-3.5" />
             <span>Notes 65%</span>
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              setBibleSplitPercent((prev) => (prev === 0 ? 50 : 0))
+            }
+            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
+              bibleSplitPercent === 0
+                ? "bg-amber-800 text-white shadow-xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            title="Maximize Sermon Notes & Outline to 100% width"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Full Notes</span>
+          </button>
         </div>
 
         {/* Right: Primary Workspace Actions */}
@@ -2227,11 +2677,163 @@ ${transitionHtml}`;
           <button
             type="button"
             onClick={() => setMobileShowBible((v) => !v)}
-            className="lg:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap"
+            className="md:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap"
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-800" />
             <span>{mobileShowBible ? "Hide Bible" : "Show Bible"}</span>
           </button>
+
+          {/* Quick Jump Workflow Dropdown Menu */}
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickJumpMenu((v) => !v);
+                setShowSermonMenu(false);
+                setShowExportMenu(false);
+              }}
+              className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                showQuickJumpMenu
+                  ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                  : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800"
+              }`}
+              title="Quick Jump between Manuscript, Notes Organizer, and Preach Mode"
+            >
+              <Layers className="w-3.5 h-3.5 text-amber-800" />
+              <span>Quick Jump</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {showQuickJumpMenu && (
+              <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs">
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                  Workflow Quick Jump
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditorViewMode("manuscript");
+                    setShowPreachModal(false);
+                    setShowQuickJumpMenu(false);
+                  }}
+                  className={`w-full text-left px-3.5 py-2.5 hover:bg-amber-50/70 flex items-start justify-between gap-2 transition-colors ${
+                    editorViewMode === "manuscript" && !showPreachModal
+                      ? "bg-amber-50/90 text-amber-950 font-semibold"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <FileText className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">
+                        Manuscript
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal">
+                        Draft sermon text, cues &amp; TTS read-aloud
+                      </div>
+                    </div>
+                  </div>
+                  {editorViewMode === "manuscript" && !showPreachModal && (
+                    <Check className="w-3.5 h-3.5 text-amber-800 shrink-0 mt-0.5" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditorViewMode("organizer");
+                    setShowPreachModal(false);
+                    setShowQuickJumpMenu(false);
+                  }}
+                  className={`w-full text-left px-3.5 py-2.5 hover:bg-amber-50/70 flex items-start justify-between gap-2 transition-colors ${
+                    editorViewMode === "organizer" && !showPreachModal
+                      ? "bg-amber-50/90 text-amber-950 font-semibold"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Layers className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">
+                        Notes Organizer
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal">
+                        AI-powered logical sermon note structuring
+                      </div>
+                    </div>
+                  </div>
+                  {editorViewMode === "organizer" && !showPreachModal && (
+                    <Check className="w-3.5 h-3.5 text-amber-800 shrink-0 mt-0.5" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPreachModal(true);
+                    setShowQuickJumpMenu(false);
+                  }}
+                  className={`w-full text-left px-3.5 py-2.5 hover:bg-amber-50/70 flex items-start justify-between gap-2 transition-colors border-t border-slate-100 ${
+                    showPreachModal
+                      ? "bg-amber-50/90 text-amber-950 font-semibold"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Play className="w-4 h-4 text-amber-800 fill-current shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-amber-950">
+                        Preach Mode
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal">
+                        Full-screen pulpit teleprompter &amp; live timer
+                      </div>
+                    </div>
+                  </div>
+                  {showPreachModal && (
+                    <Check className="w-3.5 h-3.5 text-amber-800 shrink-0 mt-0.5" />
+                  )}
+                </button>
+
+                <div className="border-t border-slate-100 mt-1 pt-1 px-2 flex items-center justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorViewMode("outline");
+                      setShowPreachModal(false);
+                      setShowQuickJumpMenu(false);
+                    }}
+                    className="flex-1 text-center py-1.5 rounded-md text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    Outline View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorViewMode("features");
+                      setShowPreachModal(false);
+                      setShowQuickJumpMenu(false);
+                    }}
+                    className="flex-1 text-center py-1.5 rounded-md text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    Features
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorViewMode("howto");
+                      setShowPreachModal(false);
+                      setShowQuickJumpMenu(false);
+                    }}
+                    className="flex-1 text-center py-1.5 rounded-md text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    How To Use
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -2322,20 +2924,24 @@ ${transitionHtml}`;
       </header>
 
       {/* MAIN SPLIT WORKSPACE */}
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+      <main className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         {/* ============================================== */}
         {/* LEFT PANE: SCRIPTURE & EXEGESIS COMPANION      */}
         {/* ============================================== */}
         <section
           style={{
             width:
-              typeof window !== "undefined" && window.innerWidth >= 1024
+              typeof window !== "undefined" && window.innerWidth >= 768
                 ? `${bibleSplitPercent}%`
                 : undefined,
           }}
           className={`${
-            mobileShowBible ? "flex" : "hidden lg:flex"
-          } w-full lg:h-full h-1/2 flex-col bg-[#fcfaf7] border-b lg:border-b-0 lg:border-r border-slate-200 overflow-hidden`}
+            bibleSplitPercent === 0
+              ? "hidden"
+              : mobileShowBible
+              ? "flex"
+              : "hidden md:flex"
+          } w-full md:h-full h-[38vh] min-h-0 flex-col bg-[#fcfaf7] border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden`}
         >
           {/* Bible Controls Header */}
           <div className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2.5 flex-none relative">
@@ -3002,7 +3608,8 @@ ${transitionHtml}`;
           {/* Bible Content Body */}
           <div
             ref={bibleReaderScrollRef}
-            className="flex-1 overflow-y-auto p-4 sm:p-6"
+            onScroll={() => saveCurrentBibleChapterScroll()}
+            className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6"
           >
             {bibleTab === "reader" && (
               <div className="space-y-4 max-w-2xl mx-auto">
@@ -3121,8 +3728,13 @@ ${transitionHtml}`;
                   </div>
                 ) : (
                   <div className="font-serif text-slate-800 leading-relaxed text-base space-y-1.5 select-text">
-                    {displayedVerses.map((v) => {
+                    {displayedVerses.map((v, vIdx) => {
                       const isSelected = selectedVerses.includes(v.v);
+                      const isPopoverOpen = activeVersePopoverNum === v.v;
+                      const verseRefKey = `${bibleBook} ${bibleChapter}:${v.v}`;
+                      const hasPersonalNote = Boolean(
+                        (personalVerseNotes[verseRefKey] || "").trim()
+                      );
                       const hlKey = `${bibleBook}-${bibleChapter}-${v.v}`;
                       const isBookmarked = bookmarkedVerses.some(
                         (b) => b.id === hlKey
@@ -3137,209 +3749,536 @@ ${transitionHtml}`;
                           ? "verse-highlight-blue"
                           : "";
 
+                      const verseNote = isPopoverOpen
+                        ? getVerseCommentaryNote(
+                            bibleBook,
+                            bibleChapter,
+                            v.v,
+                            v.text
+                          )
+                        : null;
+                      const isLoadingThisVerse =
+                        loadingVerseCommentaryKey === verseRefKey;
+                      const isSavedToScratchpad = Boolean(
+                        savedVerseCommentaryKeys[verseRefKey]
+                      );
+                      const prevDisplayedVerse =
+                        vIdx > 0 ? displayedVerses[vIdx - 1] : null;
+                      const nextDisplayedVerse =
+                        vIdx < displayedVerses.length - 1
+                          ? displayedVerses[vIdx + 1]
+                          : null;
+
                       return (
                         <div
                           id={`bible-verse-row-${v.v}`}
                           key={v.v}
-                          className={`group relative py-1.5 px-2.5 rounded-lg transition-colors flex items-start gap-2.5 ${
-                            isSelected
+                          className={`group relative py-1.5 px-2.5 rounded-lg transition-colors ${
+                            isPopoverOpen
+                              ? "bg-amber-50/95 ring-1 ring-amber-400/80 shadow-xs"
+                              : isSelected
                               ? "bg-amber-100/80 ring-1 ring-amber-300/70"
                               : "hover:bg-amber-100/40"
                           }`}
                         >
-                          <div className="flex items-center gap-1 flex-none mt-0.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedVerses((prev) =>
-                                  prev.includes(v.v)
-                                    ? prev.filter((num) => num !== v.v)
-                                    : [...prev, v.v]
-                                )
-                              }
-                              className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded select-none transition-colors ${
-                                isSelected
-                                  ? "bg-amber-800 text-white"
-                                  : "bg-amber-100/80 hover:bg-amber-200 text-amber-900"
-                              }`}
-                              title="Click to select or deselect verse"
-                            >
-                              {v.v}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleVerseBookmark(
-                                  bibleBook,
-                                  bibleChapter,
-                                  v.v,
-                                  v.text,
-                                  bibleVersion
-                                )
-                              }
-                              className={`p-1 rounded transition-colors ${
-                                isBookmarked
-                                  ? "text-amber-700 bg-amber-100/70 hover:bg-amber-200/70"
-                                  : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-700 hover:bg-amber-50"
-                              }`}
-                              title={
-                                isBookmarked
-                                  ? `Remove bookmark (${bibleBook} ${bibleChapter}:${v.v})`
-                                  : `Bookmark ${bibleBook} ${bibleChapter}:${v.v}`
-                              }
-                              aria-label={
-                                isBookmarked
-                                  ? "Remove verse bookmark"
-                                  : "Bookmark verse"
-                              }
-                            >
-                              <Bookmark
-                                className="w-3.5 h-3.5"
-                                fill={isBookmarked ? "currentColor" : "none"}
-                              />
-                            </button>
-                          </div>
-
-                          <span
-                            className={`flex-1 leading-relaxed ${highlightClass}`}
-                          >
-                            {v.text}
-                          </span>
-
-                          {/* Hover Action Bar */}
-                          <div className="hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 shadow-xs px-1.5 py-0.5 rounded-md text-[11px] font-sans flex-none z-10">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleVerseBookmark(
-                                  bibleBook,
-                                  bibleChapter,
-                                  v.v,
-                                  v.text,
-                                  bibleVersion
-                                )
-                              }
-                              className={`px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold whitespace-nowrap ${
-                                isBookmarked
-                                  ? "text-amber-900 bg-amber-100/80 hover:bg-amber-200/80"
-                                  : "text-slate-600 hover:text-amber-900 hover:bg-amber-50"
-                              }`}
-                              title={
-                                isBookmarked
-                                  ? "Remove from Bookmarks"
-                                  : "Save to Bookmarks"
-                              }
-                            >
-                              <Bookmark
-                                className="w-3 h-3"
-                                fill={isBookmarked ? "currentColor" : "none"}
-                              />
-                              <span>{isBookmarked ? "Saved" : "Bookmark"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                insertScriptureQuote(
-                                  bibleBook,
-                                  bibleChapter,
-                                  v.v,
-                                  v.text
-                                )
-                              }
-                              className="text-amber-900 hover:text-amber-950 font-semibold px-1.5 py-0.5 rounded hover:bg-amber-50 flex items-center gap-1 whitespace-nowrap"
-                              title="Quote verse in manuscript"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Quote</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                applyVerseRangeSelection(v.v, v.v);
-                                syncSermonToChosenScripture({
-                                  vStart: v.v,
-                                  vEnd: v.v,
-                                  runAiEnrichment: false,
-                                });
-                              }}
-                              className="text-purple-800 hover:text-purple-950 font-semibold px-1.5 py-0.5 rounded hover:bg-purple-50 whitespace-nowrap"
-                              title="Build sermon from this verse"
-                            >
-                              Build Sermon
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const str = `${bibleBook} ${bibleChapter}:${v.v} (${bibleVersion}) — "${v.text}"`;
-                                navigator.clipboard?.writeText(str);
-                                setCopiedVerseNum(v.v);
-                                setTimeout(() => setCopiedVerseNum(null), 1200);
-                              }}
-                              className="text-slate-600 hover:text-slate-900 px-1.5 py-0.5 rounded hover:bg-slate-100 whitespace-nowrap"
-                            >
-                              {copiedVerseNum === v.v ? "Copied" : "Copy"}
-                            </button>
-
-                            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
-
-                            {/* 3-Color Highlight Picker (Yellow, Green, Blue) */}
-                            <div
-                              className="flex items-center gap-1 px-0.5"
-                              title="Choose verse highlight color"
-                            >
-                              <Highlighter className="w-3 h-3 text-slate-400 mr-0.5" />
-                              {(
-                                [
-                                  {
-                                    color: "yellow",
-                                    bg: "bg-yellow-300 border-yellow-400",
-                                    ring: "ring-amber-600",
-                                    label: "Yellow",
-                                  },
-                                  {
-                                    color: "green",
-                                    bg: "bg-emerald-300 border-emerald-400",
-                                    ring: "ring-emerald-700",
-                                    label: "Green",
-                                  },
-                                  {
-                                    color: "blue",
-                                    bg: "bg-sky-300 border-sky-400",
-                                    ring: "ring-sky-700",
-                                    label: "Blue",
-                                  },
-                                ] as const
-                              ).map((swatch) => {
-                                const isActive = hlColor === swatch.color;
-                                return (
-                                  <button
-                                    key={swatch.color}
-                                    type="button"
-                                    onClick={() =>
-                                      setVerseHighlightColor(
-                                        hlKey,
-                                        swatch.color
-                                      )
-                                    }
-                                    className={`w-3.5 h-3.5 rounded-full border ${
-                                      swatch.bg
-                                    } hover:scale-110 transition-transform ${
-                                      isActive
-                                        ? `ring-2 ring-offset-1 ${swatch.ring}`
-                                        : ""
-                                    }`}
-                                    title={
-                                      isActive
-                                        ? `Remove ${swatch.label} highlight`
-                                        : `Highlight verse in ${swatch.label}`
-                                    }
-                                    aria-label={`Highlight ${swatch.label}`}
+                          <div className="flex items-start gap-2.5">
+                            <div className="flex items-center gap-1 flex-none mt-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (e.shiftKey) {
+                                    setSelectedVerses((prev) =>
+                                      prev.includes(v.v)
+                                        ? prev.filter((num) => num !== v.v)
+                                        : [...prev, v.v]
+                                    );
+                                    return;
+                                  }
+                                  setActiveVersePopoverNum((prev) =>
+                                    prev === v.v ? null : v.v
+                                  );
+                                }}
+                                className={`relative text-xs font-mono font-bold px-1.5 py-0.5 rounded select-none transition-all cursor-pointer ${
+                                  isPopoverOpen
+                                    ? "bg-amber-900 text-white ring-2 ring-amber-400 shadow-xs"
+                                    : isSelected
+                                    ? "bg-amber-800 text-white"
+                                    : "bg-amber-100/80 hover:bg-amber-200 text-amber-900"
+                                }`}
+                                title={`Click verse ${v.v} for granular verse commentary popover (Shift+Click to multi-select)`}
+                                aria-expanded={isPopoverOpen}
+                              >
+                                {v.v}
+                                {hasPersonalNote && (
+                                  <span
+                                    className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-purple-600 ring-1 ring-white"
+                                    title="Has personal verse exegesis note"
                                   />
-                                );
-                              })}
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleVerseBookmark(
+                                    bibleBook,
+                                    bibleChapter,
+                                    v.v,
+                                    v.text,
+                                    bibleVersion
+                                  )
+                                }
+                                className={`p-1 rounded transition-colors ${
+                                  isBookmarked
+                                    ? "text-amber-700 bg-amber-100/70 hover:bg-amber-200/70"
+                                    : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-700 hover:bg-amber-50"
+                                }`}
+                                title={
+                                  isBookmarked
+                                    ? `Remove bookmark (${bibleBook} ${bibleChapter}:${v.v})`
+                                    : `Bookmark ${bibleBook} ${bibleChapter}:${v.v}`
+                                }
+                                aria-label={
+                                  isBookmarked
+                                    ? "Remove verse bookmark"
+                                    : "Bookmark verse"
+                                }
+                              >
+                                <Bookmark
+                                  className="w-3.5 h-3.5"
+                                  fill={isBookmarked ? "currentColor" : "none"}
+                                />
+                              </button>
+                            </div>
+
+                            <span
+                              className={`flex-1 leading-relaxed ${highlightClass}`}
+                            >
+                              {v.text}
+                            </span>
+
+                            {/* Hover Action Bar */}
+                            <div className="hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 shadow-xs px-1.5 py-0.5 rounded-md text-[11px] font-sans flex-none z-10">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveVersePopoverNum((prev) =>
+                                    prev === v.v ? null : v.v
+                                  )
+                                }
+                                className={`px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold whitespace-nowrap ${
+                                  isPopoverOpen
+                                    ? "bg-amber-900 text-white"
+                                    : "text-amber-900 hover:bg-amber-50"
+                                }`}
+                                title="Open granular verse commentary popover"
+                              >
+                                <BookOpen className="w-3 h-3" />
+                                <span>Exegesis</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleVerseBookmark(
+                                    bibleBook,
+                                    bibleChapter,
+                                    v.v,
+                                    v.text,
+                                    bibleVersion
+                                  )
+                                }
+                                className={`px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold whitespace-nowrap ${
+                                  isBookmarked
+                                    ? "text-amber-900 bg-amber-100/80 hover:bg-amber-200/80"
+                                    : "text-slate-600 hover:text-amber-900 hover:bg-amber-50"
+                                }`}
+                                title={
+                                  isBookmarked
+                                    ? "Remove from Bookmarks"
+                                    : "Save to Bookmarks"
+                                }
+                              >
+                                <Bookmark
+                                  className="w-3 h-3"
+                                  fill={isBookmarked ? "currentColor" : "none"}
+                                />
+                                <span>{isBookmarked ? "Saved" : "Bookmark"}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  insertScriptureQuote(
+                                    bibleBook,
+                                    bibleChapter,
+                                    v.v,
+                                    v.text
+                                  )
+                                }
+                                className="text-amber-900 hover:text-amber-950 font-semibold px-1.5 py-0.5 rounded hover:bg-amber-50 flex items-center gap-1 whitespace-nowrap"
+                                title="Quote verse in manuscript"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Quote</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  applyVerseRangeSelection(v.v, v.v);
+                                  syncSermonToChosenScripture({
+                                    vStart: v.v,
+                                    vEnd: v.v,
+                                    runAiEnrichment: false,
+                                  });
+                                }}
+                                className="text-purple-800 hover:text-purple-950 font-semibold px-1.5 py-0.5 rounded hover:bg-purple-50 whitespace-nowrap"
+                                title="Build sermon from this verse"
+                              >
+                                Build Sermon
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const str = `${bibleBook} ${bibleChapter}:${v.v} (${bibleVersion}) — "${v.text}"`;
+                                  navigator.clipboard?.writeText(str);
+                                  setCopiedVerseNum(v.v);
+                                  setTimeout(() => setCopiedVerseNum(null), 1200);
+                                }}
+                                className="text-slate-600 hover:text-slate-900 px-1.5 py-0.5 rounded hover:bg-slate-100 whitespace-nowrap"
+                              >
+                                {copiedVerseNum === v.v ? "Copied" : "Copy"}
+                              </button>
+
+                              <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+
+                              {/* 3-Color Highlight Picker (Yellow, Green, Blue) */}
+                              <div
+                                className="flex items-center gap-1 px-0.5"
+                                title="Choose verse highlight color"
+                              >
+                                <Highlighter className="w-3 h-3 text-slate-400 mr-0.5" />
+                                {(
+                                  [
+                                    {
+                                      color: "yellow",
+                                      bg: "bg-yellow-300 border-yellow-400",
+                                      ring: "ring-amber-600",
+                                      label: "Yellow",
+                                    },
+                                    {
+                                      color: "green",
+                                      bg: "bg-emerald-300 border-emerald-400",
+                                      ring: "ring-emerald-700",
+                                      label: "Green",
+                                    },
+                                    {
+                                      color: "blue",
+                                      bg: "bg-sky-300 border-sky-400",
+                                      ring: "ring-sky-700",
+                                      label: "Blue",
+                                    },
+                                  ] as const
+                                ).map((swatch) => {
+                                  const isActive = hlColor === swatch.color;
+                                  return (
+                                    <button
+                                      key={swatch.color}
+                                      type="button"
+                                      onClick={() =>
+                                        setVerseHighlightColor(
+                                          hlKey,
+                                          swatch.color
+                                        )
+                                      }
+                                      className={`w-3.5 h-3.5 rounded-full border ${
+                                        swatch.bg
+                                      } hover:scale-110 transition-transform ${
+                                        isActive
+                                          ? `ring-2 ring-offset-1 ${swatch.ring}`
+                                          : ""
+                                      }`}
+                                      title={
+                                        isActive
+                                          ? `Remove ${swatch.label} highlight`
+                                          : `Highlight verse in ${swatch.label}`
+                                      }
+                                      aria-label={`Highlight ${swatch.label}`}
+                                    />
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
+
+                          {/* Granular Verse-Specific Commentary Popover */}
+                          {isPopoverOpen && verseNote && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-2.5 ml-1 sm:ml-6 bg-white border border-amber-300/90 rounded-xl shadow-lg p-3.5 sm:p-4 font-sans text-slate-800 space-y-3 relative z-20 animate-in fade-in duration-150"
+                            >
+                              {/* Small top pointer arrow */}
+                              <div className=" -top-1.5 left-3 w-3 h-3 bg-white border-t border-l border-amber-300/90 rotate-45 hidden sm:block" />
+
+                              {/* Popover Header */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-900 text-white font-mono text-xs font-bold">
+                                    {verseNote.reference}
+                                  </span>
+                                  <span
+                                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                                      verseNote.source === "ai"
+                                        ? "bg-purple-50 text-purple-900 border-purple-200"
+                                        : "bg-amber-50 text-amber-900 border-amber-200"
+                                    }`}
+                                  >
+                                    {verseNote.source === "ai"
+                                      ? "Gemini Verse Exegesis"
+                                      : "Verse Exegesis Note"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={!prevDisplayedVerse}
+                                    onClick={() => {
+                                      if (prevDisplayedVerse) {
+                                        setActiveVersePopoverNum(
+                                          prevDisplayedVerse.v
+                                        );
+                                      }
+                                    }}
+                                    className="px-1.5 py-0.5 text-[11px] font-mono font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-35"
+                                    title={
+                                      prevDisplayedVerse
+                                        ? `Previous verse (v.${prevDisplayedVerse.v})`
+                                        : "First displayed verse"
+                                    }
+                                  >
+                                    ← v.{prevDisplayedVerse?.v ?? v.v}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!nextDisplayedVerse}
+                                    onClick={() => {
+                                      if (nextDisplayedVerse) {
+                                        setActiveVersePopoverNum(
+                                          nextDisplayedVerse.v
+                                        );
+                                      }
+                                    }}
+                                    className="px-1.5 py-0.5 text-[11px] font-mono font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-35"
+                                    title={
+                                      nextDisplayedVerse
+                                        ? `Next verse (v.${nextDisplayedVerse.v})`
+                                        : "Last displayed verse"
+                                    }
+                                  >
+                                    v.{nextDisplayedVerse?.v ?? v.v} →
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      fetchSingleVerseCommentary(
+                                        bibleBook,
+                                        bibleChapter,
+                                        v.v,
+                                        v.text
+                                      )
+                                    }
+                                    disabled={isLoadingThisVerse}
+                                    className="ml-1 px-2 py-0.5 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                                    title="Generate deeper AI verse-specific commentary for this single verse"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                    <span>
+                                      {isLoadingThisVerse
+                                        ? "Analyzing..."
+                                        : "AI Deep Dive"}
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setActiveVersePopoverNum(null)
+                                    }
+                                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                                    title="Close verse commentary popover"
+                                    aria-label="Close verse commentary popover"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Headline & Exegetical Note */}
+                              <div className="space-y-1.5">
+                                <h4 className="font-display text-xs sm:text-sm font-bold text-slate-900">
+                                  {verseNote.headline}
+                                </h4>
+                                <p className="text-xs text-slate-700 leading-relaxed">
+                                  {verseNote.exegeticalNote}
+                                </p>
+                              </div>
+
+                              {/* Key Term / Lexical Nuance */}
+                              <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg px-3 py-2 space-y-0.5">
+                                <div className="text-[10px] font-mono uppercase tracking-wider text-amber-900 font-bold">
+                                  Key Lexical / Grammatical Focus
+                                </div>
+                                <p className="text-xs text-amber-950 leading-snug">
+                                  {verseNote.keyTerm}
+                                </p>
+                              </div>
+
+                              {/* Pulpit / Preaching Angle */}
+                              <div className="bg-slate-50 border border-slate-200/80 rounded-lg px-3 py-2 flex items-start gap-2">
+                                <Lightbulb className="w-3.5 h-3.5 text-amber-700 flex-none mt-0.5" />
+                                <p className="text-xs text-slate-700 leading-snug">
+                                  <span className="font-semibold text-slate-900">
+                                    Preaching Angle:{" "}
+                                  </span>
+                                  {verseNote.preachingAngle}
+                                </p>
+                              </div>
+
+                              {/* Cross References */}
+                              {verseNote.crossReferences.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+                                    Cross-Refs:
+                                  </span>
+                                  {verseNote.crossReferences.map((cr) => (
+                                    <button
+                                      key={cr}
+                                      type="button"
+                                      onClick={() => {
+                                        const parsed = parseReferenceParts(cr);
+                                        if (parsed) {
+                                          loadBiblePassage(
+                                            parsed.book,
+                                            parsed.chapter,
+                                            bibleVersion,
+                                            parsed.vStart,
+                                            parsed.vEnd
+                                          );
+                                          showToast(`Jumped to ${cr}`);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-950 font-mono text-[11px] font-medium transition-colors"
+                                      title={`Jump to ${cr} in Scripture Reader`}
+                                    >
+                                      {cr}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Personal Verse Note Input */}
+                              <div className="pt-1">
+                                <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold mb-1">
+                                  Your Exegetical Observation on{" "}
+                                  {verseNote.reference}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={personalVerseNotes[verseRefKey] || ""}
+                                  onChange={(e) =>
+                                    setPersonalVerseNotes((prev) => ({
+                                      ...prev,
+                                      [verseRefKey]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder={`Add a personal note on ${verseNote.reference}...`}
+                                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
+                                />
+                              </div>
+
+                              {/* Popover Footer Actions */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      saveVerseCommentaryToScratchpad(
+                                        verseNote,
+                                        v.text
+                                      )
+                                    }
+                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                      isSavedToScratchpad
+                                        ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                        : "bg-amber-800 hover:bg-amber-900 text-white"
+                                    }`}
+                                  >
+                                    {isSavedToScratchpad ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Saved to Scratchpad</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Save to Scratchpad</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const personal = (
+                                        personalVerseNotes[verseRefKey] || ""
+                                      ).trim();
+                                      insertHtmlAtCursor(
+                                        `<blockquote class="scripture-quote"><strong>${
+                                          verseNote.reference
+                                        } (${bibleVersion}):</strong> "${
+                                          v.text
+                                        }"<br/><em>Exegetical Note (${
+                                          verseNote.headline
+                                        }):</em> ${verseNote.exegeticalNote}${
+                                          personal
+                                            ? `<br/><em>Pastor's Note:</em> ${personal}`
+                                            : ""
+                                        }</blockquote><p></p>`
+                                      );
+                                      showToast(
+                                        `Inserted ${verseNote.reference} & exegetical note into manuscript`
+                                      );
+                                    }}
+                                    className="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-100/80 hover:bg-amber-200/80 text-amber-950 border border-amber-200 flex items-center gap-1 transition-colors"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>Insert in Manuscript</span>
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedVerses((prev) =>
+                                      prev.includes(v.v)
+                                        ? prev.filter((num) => num !== v.v)
+                                        : [...prev, v.v]
+                                    )
+                                  }
+                                  className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                                    isSelected
+                                      ? "bg-amber-100 text-amber-950 border-amber-300"
+                                      : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200"
+                                  }`}
+                                >
+                                  {isSelected
+                                    ? "✓ Selected for Batch Quote"
+                                    : "Select Verse for Quote"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -4167,130 +5106,93 @@ ${transitionHtml}`;
         <section
           style={{
             width:
-              typeof window !== "undefined" && window.innerWidth >= 1024
+              typeof window !== "undefined" && window.innerWidth >= 768
                 ? `${100 - bibleSplitPercent}%`
                 : undefined,
           }}
-          className="w-full lg:h-full flex-1 flex flex-col bg-white overflow-hidden"
+          className="w-full md:h-full flex-1 min-h-0 flex flex-col bg-white overflow-hidden"
         >
-          {/* Sermon Metadata Header */}
-          <div className="p-4 bg-white border-b border-slate-200 flex-none space-y-2.5">
-            {/* Title & View Switcher */}
-            <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+          {/* Compact Sermon Metadata Header */}
+          <div className="px-3.5 py-2 bg-white border-b border-slate-200 flex-none space-y-1.5">
+            {/* Row 1: Sermon Title + Quick Controls + View Switcher Tabs */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  value={currentSermon.title}
+                  onChange={(e) =>
+                    updateCurrentSermon({ title: e.target.value })
+                  }
+                  className="flex-1 min-w-[140px] font-display text-base sm:text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:outline-none focus:ring-0 select-text"
+                  placeholder="Untitled Sermon"
+                />
+
+                {/* Inline Scripture Passage Tag & Build Button */}
+                <div className="hidden sm:flex items-center gap-1 bg-amber-50/80 border border-amber-200/80 rounded-md px-2 py-0.5 text-xs shrink-0">
+                  <span className="text-[10px] font-semibold text-amber-800 uppercase">
+                    Text:
+                  </span>
                   <input
                     type="text"
-                    value={currentSermon.title}
+                    value={currentSermon.passageTag}
                     onChange={(e) =>
-                      updateCurrentSermon({ title: e.target.value })
+                      updateCurrentSermon({ passageTag: e.target.value })
                     }
-                    className="w-full font-display text-xl sm:text-2xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:outline-none focus:ring-0 select-text"
-                    placeholder="Untitled Sermon"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        parseAndLoadReference(currentSermon.passageTag, true);
+                      }
+                    }}
+                    placeholder="e.g. Romans 8:1-17"
+                    className="w-28 text-xs font-semibold text-amber-950 bg-transparent border-none p-0 focus:outline-none select-text"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowTitleSuggestions((v) => !v)}
-                    className="px-2 py-0.5 rounded bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-900 border border-slate-200 text-[11px] font-medium whitespace-nowrap shrink-0"
-                    title="Show or hide sermon title suggestions for the chosen Scripture"
+                    onClick={() =>
+                      parseAndLoadReference(currentSermon.passageTag, true)
+                    }
+                    className="px-1.5 py-0.5 rounded bg-amber-800 hover:bg-amber-900 text-white text-[10px] font-semibold flex items-center gap-1 transition-colors whitespace-nowrap"
+                    title="Load this Scripture passage and update Title, Big Idea, Intro Illustration & Manuscript"
                   >
-                    Title Ideas
+                    <Wand2 className="w-2.5 h-2.5" />
+                    <span>Sync</span>
                   </button>
                 </div>
 
-                {/* Clickable Title Suggestions Bar Based on Chosen Scripture */}
-                {showTitleSuggestions && (
-                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Suggestions for {currentSermon.passageTag}:
-                    </span>
-                    {activeTitleSuggestions.map((t, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          updateCurrentSermon({ title: t });
-                          showToast(`Applied sermon title: "${t}"`);
-                        }}
-                        className={`text-[11px] px-2 py-0.5 rounded border transition-colors truncate max-w-[240px] ${
-                          currentSermon.title === t
-                            ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold"
-                            : "bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-600 hover:text-slate-900"
-                        }`}
-                        title={`Click to use title: ${t}`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowTitleSuggestions((v) => !v)}
+                  className={`px-2 py-0.5 rounded border text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                    showTitleSuggestions
+                      ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                      : "bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-900 border-slate-200"
+                  }`}
+                  title="Show or hide sermon title suggestions for the chosen Scripture"
+                >
+                  Title Ideas
+                </button>
 
-                <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 flex-wrap">
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">Text:</span>
-                    <input
-                      type="text"
-                      value={currentSermon.passageTag}
-                      onChange={(e) =>
-                        updateCurrentSermon({ passageTag: e.target.value })
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          parseAndLoadReference(
-                            currentSermon.passageTag,
-                            true
-                          );
-                        }
-                      }}
-                      placeholder="e.g. Romans 8:1-17"
-                      className="border-b border-dashed border-slate-300 focus:border-amber-700 focus:outline-none pb-0.5 text-amber-900 font-semibold bg-transparent select-text w-32"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        parseAndLoadReference(currentSermon.passageTag, true)
-                      }
-                      className="px-2 py-0.5 rounded bg-amber-800 hover:bg-amber-900 text-white text-[11px] font-semibold flex items-center gap-1 transition-colors whitespace-nowrap"
-                      title="Load this Scripture passage and update Title, Big Idea, Intro Illustration & Manuscript"
-                    >
-                      <Wand2 className="w-3 h-3" />
-                      <span>Build from Text</span>
-                    </button>
-                  </div>
-                  <span aria-hidden="true" className="text-slate-300">
-                    ·
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">Series:</span>
-                    <input
-                      type="text"
-                      value={currentSermon.series}
-                      onChange={(e) =>
-                        updateCurrentSermon({ series: e.target.value })
-                      }
-                      placeholder="e.g. Unstoppable Grace"
-                      className="border-b border-dashed border-slate-300 focus:border-amber-700 focus:outline-none pb-0.5 text-slate-700 font-medium bg-transparent select-text"
-                    />
-                  </div>
-                  <span aria-hidden="true" className="text-slate-300">
-                    ·
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">Date:</span>
-                    <input
-                      type="date"
-                      value={currentSermon.date}
-                      onChange={(e) =>
-                        updateCurrentSermon({ date: e.target.value })
-                      }
-                      className="border-b border-dashed border-slate-300 focus:border-amber-700 focus:outline-none pb-0.5 text-slate-700 font-mono text-xs bg-transparent"
-                    />
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSermonSetupDetails((v) => !v)}
+                  className={`px-2 py-0.5 rounded border text-[11px] font-medium whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors ${
+                    showSermonSetupDetails
+                      ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                      : "bg-slate-100 hover:bg-slate-200/70 text-slate-600 border-slate-200"
+                  }`}
+                  title="Toggle Big Idea, Homiletical Approach, Series & Date settings"
+                >
+                  <span>Big Idea &amp; Setup</span>
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform ${
+                      showSermonSetupDetails ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Manuscript vs Notes Organizer vs Outline View Segmented Control */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium border border-slate-200 shrink-0">
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium border border-slate-200 shrink-0 overflow-x-auto max-w-full">
                 <button
                   type="button"
                   onClick={() => setEditorViewMode("manuscript")}
@@ -4352,182 +5254,240 @@ ${transitionHtml}`;
               </div>
             </div>
 
-            {/* Homiletical Mode Selector Row */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 text-xs flex-wrap">
-                <span className="text-slate-400 font-medium">
-                  Homiletical Approach:
+            {/* Clickable Title Suggestions Bar (Collapsible) */}
+            {showTitleSuggestions && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Suggestions for {currentSermon.passageTag}:
                 </span>
-                <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
-                  {(
-                    [
-                      { id: "expository", label: "Expository" },
-                      { id: "textual", label: "Textual" },
-                      { id: "topical", label: "Topical" },
-                    ] as { id: HomileticalMode; label: string }[]
-                  ).map((m) => (
+                {activeTitleSuggestions.map((t, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      updateCurrentSermon({ title: t });
+                      showToast(`Applied sermon title: "${t}"`);
+                    }}
+                    className={`text-[11px] px-2 py-0.5 rounded border transition-colors truncate max-w-[240px] ${
+                      currentSermon.title === t
+                        ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold"
+                        : "bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-600 hover:text-slate-900"
+                    }`}
+                    title={`Click to use title: ${t}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Collapsible Sermon Setup Drawer (Homiletical Mode, Series/Date & Big Idea) */}
+            {showSermonSetupDetails && (
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-slate-400 font-medium">
+                      Homiletical Approach:
+                    </span>
+                    <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
+                      {(
+                        [
+                          { id: "expository", label: "Expository" },
+                          { id: "textual", label: "Textual" },
+                          { id: "topical", label: "Topical" },
+                        ] as { id: HomileticalMode; label: string }[]
+                      ).map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            updateCurrentSermon({ homileticalMode: m.id });
+                            showToast(`Switched to ${m.label} preaching mode`);
+                          }}
+                          className={`px-2 py-0.5 rounded-md transition-colors whitespace-nowrap ${
+                            currentSermon.homileticalMode === m.id
+                              ? "bg-white text-amber-950 font-semibold shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
                     <button
-                      key={m.id}
                       type="button"
-                      onClick={() => {
-                        updateCurrentSermon({ homileticalMode: m.id });
-                        showToast(`Switched to ${m.label} preaching mode`);
-                      }}
-                      className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
-                        currentSermon.homileticalMode === m.id
-                          ? "bg-white text-amber-950 font-semibold shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
+                      onClick={() => setShowHomileticGuide(true)}
+                      className="p-1 text-slate-400 hover:text-amber-800 rounded transition-colors"
+                      title="Compare Expository, Textual & Topical frameworks"
                     >
-                      {m.label}
+                      <HelpCircle className="w-3.5 h-3.5" />
                     </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowHomileticGuide(true)}
-                  className="p-1 text-slate-400 hover:text-amber-800 rounded transition-colors"
-                  title="Compare Expository, Textual & Topical frameworks"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </button>
-              </div>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={applyHomileticModeTemplate}
-                  className="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-medium transition-colors whitespace-nowrap"
-                >
-                  Rebuild for {activeReferenceBadge}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAiGenerateFullSermonFromText}
-                  disabled={!!aiLoadingTask}
-                  className="px-2.5 py-1 rounded-md bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap disabled:opacity-50"
-                  title="Use Gemini AI to craft Title Suggestions, Big Idea, Intro Illustration, and Manuscript from your chosen Scripture text"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>AI Generate All from Text</span>
-                </button>
-              </div>
-            </div>
+                    <span className="text-slate-300">·</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400">Series:</span>
+                      <input
+                        type="text"
+                        value={currentSermon.series}
+                        onChange={(e) =>
+                          updateCurrentSermon({ series: e.target.value })
+                        }
+                        placeholder="e.g. Unstoppable Grace"
+                        className="border-b border-dashed border-slate-300 focus:border-amber-700 focus:outline-none pb-0.5 text-slate-700 font-medium bg-transparent select-text w-28"
+                      />
+                    </div>
+                    <span className="text-slate-300">·</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400">Date:</span>
+                      <input
+                        type="date"
+                        value={currentSermon.date}
+                        onChange={(e) =>
+                          updateCurrentSermon({ date: e.target.value })
+                        }
+                        className="border-b border-dashed border-slate-300 focus:border-amber-700 focus:outline-none pb-0.5 text-slate-700 font-mono text-xs bg-transparent"
+                      />
+                    </div>
+                  </div>
 
-            {/* Topical Cross-References Bar (When Topical mode is selected) */}
-            {currentSermon.homileticalMode === "topical" && (
-              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-semibold text-slate-700 mr-1">
-                    Topical Passages:
-                  </span>
-                  {(currentSermon.topicalRefs || []).map((ref, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded-md text-xs"
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={applyHomileticModeTemplate}
+                      className="px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-medium transition-colors whitespace-nowrap"
                     >
-                      <button
-                        type="button"
-                        onClick={() => parseAndLoadReference(ref, true)}
-                        className="font-medium hover:text-amber-800 hover:underline"
-                      >
-                        {ref}
-                      </button>
+                      Rebuild for {activeReferenceBadge}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAiGenerateFullSermonFromText}
+                      disabled={!!aiLoadingTask}
+                      className="px-2 py-1 rounded-md bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap disabled:opacity-50"
+                      title="Use Gemini AI to craft Title Suggestions, Big Idea, Intro Illustration, and Manuscript from your chosen Scripture text"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>AI Generate All</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Topical Cross-References Bar (When Topical mode is selected) */}
+                {currentSermon.homileticalMode === "topical" && (
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-slate-700 mr-1">
+                        Topical Passages:
+                      </span>
+                      {(currentSermon.topicalRefs || []).map((ref, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded-md text-xs"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => parseAndLoadReference(ref, true)}
+                            className="font-medium hover:text-amber-800 hover:underline"
+                          >
+                            {ref}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (
+                                currentSermon.topicalRefs || []
+                              ).filter((_, i) => i !== idx);
+                              updateCurrentSermon({ topicalRefs: next });
+                            }}
+                            className="text-slate-400 hover:text-rose-600"
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newTopicalRef}
+                        onChange={(e) => setNewTopicalRef(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newTopicalRef.trim()) {
+                            updateCurrentSermon({
+                              topicalRefs: [
+                                ...(currentSermon.topicalRefs || []),
+                                newTopicalRef.trim(),
+                              ],
+                            });
+                            setNewTopicalRef("");
+                          }
+                        }}
+                        placeholder="Add ref (e.g. John 3:16)"
+                        className="px-2 py-1 text-xs border border-slate-200 rounded bg-white text-slate-800 w-36 focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
+                      />
                       <button
                         type="button"
                         onClick={() => {
-                          const next = (currentSermon.topicalRefs || []).filter(
-                            (_, i) => i !== idx
-                          );
-                          updateCurrentSermon({ topicalRefs: next });
+                          if (!newTopicalRef.trim()) return;
+                          updateCurrentSermon({
+                            topicalRefs: [
+                              ...(currentSermon.topicalRefs || []),
+                              newTopicalRef.trim(),
+                            ],
+                          });
+                          setNewTopicalRef("");
                         }}
-                        className="text-slate-400 hover:text-rose-600"
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-medium"
                       >
-                        &times;
+                        Add
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* The Big Idea (Homiletical Core Proposition Rooted in Scripture) */}
+                <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs font-semibold text-amber-950 whitespace-nowrap shrink-0">
+                      Big Idea ({currentSermon.passageTag}):
                     </span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={newTopicalRef}
-                    onChange={(e) => setNewTopicalRef(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newTopicalRef.trim()) {
-                        updateCurrentSermon({
-                          topicalRefs: [
-                            ...(currentSermon.topicalRefs || []),
-                            newTopicalRef.trim(),
-                          ],
-                        });
-                        setNewTopicalRef("");
+                    <input
+                      type="text"
+                      value={currentSermon.bigIdea}
+                      onChange={(e) =>
+                        updateCurrentSermon({ bigIdea: e.target.value })
                       }
-                    }}
-                    placeholder="Add ref (e.g. John 3:16)"
-                    className="px-2 py-1 text-xs border border-slate-200 rounded bg-white text-slate-800 w-36 focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
-                  />
+                      className="w-full text-xs font-medium text-amber-950 bg-transparent border-none p-0 focus:outline-none focus:ring-0 placeholder:text-amber-800/40 select-text"
+                      placeholder="State your sermon's single core biblical proposition in one clear sentence..."
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
-                      if (!newTopicalRef.trim()) return;
-                      updateCurrentSermon({
-                        topicalRefs: [
-                          ...(currentSermon.topicalRefs || []),
-                          newTopicalRef.trim(),
-                        ],
+                      const pkg = buildSermonPackageFromPassage({
+                        book: bibleBook,
+                        chapter: bibleChapter,
+                        version: bibleVersion,
+                        verses: passageVerses,
+                        mode: currentSermon.homileticalMode,
+                        verseStart: verseStartFilter,
+                        verseEnd: verseEndFilter,
                       });
-                      setNewTopicalRef("");
+                      updateCurrentSermon({ bigIdea: pkg.bigIdea });
+                      showToast(`Updated Big Idea from ${pkg.passageTag}`);
                     }}
-                    className="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-medium"
+                    className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200/80 px-2 py-0.5 rounded whitespace-nowrap shrink-0"
+                    title="Derive Big Idea from the selected Scripture passage"
                   >
-                    Add
+                    Derive from Text
                   </button>
                 </div>
               </div>
             )}
-
-            {/* The Big Idea (Homiletical Core Proposition Rooted in Scripture) */}
-            <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg px-3 py-2 flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-xs font-semibold text-amber-950 whitespace-nowrap shrink-0">
-                  Big Idea ({currentSermon.passageTag}):
-                </span>
-                <input
-                  type="text"
-                  value={currentSermon.bigIdea}
-                  onChange={(e) =>
-                    updateCurrentSermon({ bigIdea: e.target.value })
-                  }
-                  className="w-full text-xs font-medium text-amber-950 bg-transparent border-none p-0 focus:outline-none focus:ring-0 placeholder:text-amber-800/40 select-text"
-                  placeholder="State your sermon's single core biblical proposition in one clear sentence..."
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const pkg = buildSermonPackageFromPassage({
-                    book: bibleBook,
-                    chapter: bibleChapter,
-                    version: bibleVersion,
-                    verses: passageVerses,
-                    mode: currentSermon.homileticalMode,
-                    verseStart: verseStartFilter,
-                    verseEnd: verseEndFilter,
-                  });
-                  updateCurrentSermon({ bigIdea: pkg.bigIdea });
-                  showToast(`Updated Big Idea from ${pkg.passageTag}`);
-                }}
-                className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200/80 px-2 py-0.5 rounded whitespace-nowrap shrink-0"
-                title="Derive Big Idea from the selected Scripture passage"
-              >
-                Derive from Text
-              </button>
-            </div>
           </div>
 
-          {/* Rich Text Formatting Toolbar */}
-          <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-1.5 flex-wrap text-xs text-slate-600 flex-none">
+          {/* Rich Text Formatting Toolbar (Shown in Manuscript mode to maximize space in Outline & Organizer views) */}
+          {editorViewMode === "manuscript" && (
+            <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-1.5 flex-wrap text-xs text-slate-600 flex-none">
             <div className="flex items-center gap-1 flex-wrap">
               <button
                 type="button"
@@ -4849,11 +5809,12 @@ ${transitionHtml}`;
               </div>
             </div>
           </div>
+          )}
 
           {/* Editor Scroll Viewport */}
           <div
             ref={editorScrollRef}
-            className="flex-1 overflow-y-auto p-6 sm:p-10 relative bg-white"
+            className="flex-1 min-h-0 overflow-y-auto px-5 py-4 sm:px-8 sm:py-6 pb-32 relative bg-white"
           >
             {/* Active Voice Dictation Bar */}
             {isDictating && (

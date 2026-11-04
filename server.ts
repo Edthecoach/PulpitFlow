@@ -515,6 +515,76 @@ ${versesText}`;
     }
   });
 
+  // 6b. Granular Single-Verse Commentary & Exegesis Popover Note
+  app.post("/api/gemini/verse-commentary", async (req, res) => {
+    try {
+      const {
+        book = "Romans",
+        chapter = 8,
+        verse = 1,
+        version = "WEB",
+        verseText = "",
+        surroundingContext = "",
+      } = req.body;
+      const ai = getAiClient();
+      const verseRef = `${book} ${chapter}:${verse}`;
+
+      const systemInstruction = `You are an evangelical and historical-grammatical biblical exegete and seminary commentary author.
+Provide a concise, granular single-verse commentary note for ${verseRef} (${version}).
+Focus strictly on this specific verse (${verseRef}: "${verseText}") within its immediate chapter context.
+Return a JSON object with:
+- "headline": A crisp 4-8 word exegetical headline capturing the heart of ${verseRef}
+- "exegeticalNote": 2-3 sentences of granular verse-level commentary explaining the clause structure, literary flow, and theological meaning of this specific verse
+- "keyTerm": The pivotal word or phrase in ${verseRef} with its Hebrew or Koine Greek transliteration and grammatical/lexical nuance
+- "crossReferences": Array of 2-3 closely related Scripture references (e.g. ["John 5:24", "Galatians 5:16"])
+- "preachingAngle": 1 concise sentence on how a preacher can drive this specific verse home from the pulpit.`;
+
+      const prompt = `Verse Reference: ${verseRef} (${version})
+Exact Verse Text: "${verseText}"
+Surrounding Chapter Context:
+${surroundingContext}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              headline: { type: Type.STRING },
+              exegeticalNote: { type: Type.STRING },
+              keyTerm: { type: Type.STRING },
+              crossReferences: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              preachingAngle: { type: Type.STRING },
+            },
+            required: [
+              "headline",
+              "exegeticalNote",
+              "keyTerm",
+              "crossReferences",
+              "preachingAngle",
+            ],
+          },
+        },
+      });
+
+      const rawText = (response.text ?? "{}").trim();
+      const parsed = JSON.parse(rawText);
+      res.json(parsed);
+    } catch (error: any) {
+      console.error("Verse commentary error:", error);
+      res.status(500).json({
+        error:
+          error?.message || "Failed to generate granular verse commentary.",
+      });
+    }
+  });
+
   // 7. Scripture Context Search by Theme / Topic (Suggest & Link Relevant Passages)
   app.post("/api/gemini/context-search", async (req, res) => {
     try {
