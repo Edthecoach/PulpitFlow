@@ -50,6 +50,15 @@
   background: rgba(140, 120, 100, 0.55);
 }
 
+/* Hide scrollbars for clean touch-scrollable mobile toolbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Rich Manuscript Editor Styling */
 #editor:focus {
   outline: none;

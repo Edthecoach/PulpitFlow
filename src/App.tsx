@@ -193,9 +193,160 @@ export default function App() {
     }
   }, [sermons]);
 
-  // Layout & Split State
+  // Layout & Split State (Tablet/Desktop Side-by-Side or Top/Bottom & Mobile Top/Bottom)
   const [bibleSplitPercent, setBibleSplitPercent] = useState<number>(50);
-  const [mobileShowBible, setMobileShowBible] = useState<boolean>(true);
+  const [workspaceSplitDirection, setWorkspaceSplitDirection] = useState<
+    "side-by-side" | "top-bottom"
+  >(() => {
+    try {
+      const saved = localStorage.getItem("pulpitflow_workspace_split_dir_v1");
+      if (saved === "side-by-side" || saved === "top-bottom") {
+        return saved;
+      }
+    } catch {}
+    // Default portrait tablets (< 960px width) to top-bottom so neither pane feels narrow or cramped
+    if (
+      typeof window !== "undefined" &&
+      window.innerWidth >= 768 &&
+      window.innerWidth < 960
+    ) {
+      return "top-bottom";
+    }
+    return "side-by-side";
+  });
+  const [showClassicBibleDropdowns, setShowClassicBibleDropdowns] =
+    useState<boolean>(false);
+  type MobileSplitMode =
+    | "50-50"
+    | "65-35"
+    | "35-65"
+    | "bible-only"
+    | "notes-only";
+  const [mobileSplitMode, setMobileSplitMode] = useState<MobileSplitMode>(
+    () => {
+      try {
+        const saved = localStorage.getItem("pulpitflow_mobile_split_mode_v2");
+        if (
+          saved &&
+          ["50-50", "65-35", "35-65", "bible-only", "notes-only"].includes(saved)
+        ) {
+          return saved as MobileSplitMode;
+        }
+      } catch {}
+      return "50-50";
+    }
+  );
+  const [mobileBiblePercent, setMobileBiblePercent] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("pulpitflow_mobile_split_percent_v2");
+      if (saved) {
+        const val = parseFloat(saved);
+        if (!isNaN(val) && val >= 20 && val <= 80) return val;
+      }
+    } catch {}
+    return 50;
+  });
+  const [showMobileSplitMenu, setShowMobileSplitMenu] =
+    useState<boolean>(false);
+  const [isDraggingMobileSplit, setIsDraggingMobileSplit] =
+    useState<boolean>(false);
+  const [showMobileQuickJumps, setShowMobileQuickJumps] =
+    useState<boolean>(false);
+  const [viewportWidth, setViewportWidth] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
+  const mainContainerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "pulpitflow_workspace_split_dir_v1",
+        workspaceSplitDirection
+      );
+    } catch {}
+  }, [workspaceSplitDirection]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pulpitflow_mobile_split_mode_v2", mobileSplitMode);
+    } catch {}
+  }, [mobileSplitMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "pulpitflow_mobile_split_percent_v2",
+        String(mobileBiblePercent)
+      );
+    } catch {}
+  }, [mobileBiblePercent]);
+
+  const isStackedSplit =
+    viewportWidth < 768 || workspaceSplitDirection === "top-bottom";
+
+  // Mobile Top/Bottom Touch/Mouse Drag Resizing
+  const handleDividerTouchStart = (_e: React.TouchEvent) => {
+    setIsDraggingMobileSplit(true);
+  };
+
+  const handleDividerTouchMove = (e: React.TouchEvent) => {
+    if (!mainContainerRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const rect = mainContainerRef.current.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const relY = touch.clientY - rect.top;
+    const percent = Math.min(
+      80,
+      Math.max(20, Math.round((relY / rect.height) * 100))
+    );
+    setMobileBiblePercent(percent);
+    if (mobileSplitMode === "bible-only" || mobileSplitMode === "notes-only") {
+      setMobileSplitMode("50-50");
+    }
+  };
+
+  const handleDividerTouchEnd = () => {
+    setIsDraggingMobileSplit(false);
+  };
+
+  const handleDividerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingMobileSplit(true);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!mainContainerRef.current) return;
+      const rect = mainContainerRef.current.getBoundingClientRect();
+      if (rect.height <= 0) return;
+      const relY = moveEvent.clientY - rect.top;
+      const percent = Math.min(
+        80,
+        Math.max(20, Math.round((relY / rect.height) * 100))
+      );
+      setMobileBiblePercent(percent);
+      if (
+        mobileSplitMode === "bible-only" ||
+        mobileSplitMode === "notes-only"
+      ) {
+        setMobileSplitMode("50-50");
+      }
+    };
+
+    const onMouseUp = () => {
+      setIsDraggingMobileSplit(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
 
   // Dropdowns & Modals
   const [showSermonMenu, setShowSermonMenu] = useState<boolean>(false);
@@ -275,6 +426,42 @@ export default function App() {
   const [bibleTab, setBibleTab] = useState<
     "reader" | "bookmarks" | "commentaries" | "themes" | "scratchpad"
   >("reader");
+
+  // Scripture Reader Font Size State (14px to 28px, default 18px for tablet readability)
+  const [bibleFontSize, setBibleFontSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("pulpitflow_bible_font_size_v1");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 14 && parsed <= 28) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return 18;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "pulpitflow_bible_font_size_v1",
+        String(bibleFontSize)
+      );
+    } catch {}
+  }, [bibleFontSize]);
+
+  const decreaseBibleFontSize = () => {
+    setBibleFontSize((prev) => Math.max(14, prev - 2));
+  };
+
+  const increaseBibleFontSize = () => {
+    setBibleFontSize((prev) => Math.min(28, prev + 2));
+  };
+
+  const resetBibleFontSize = () => {
+    setBibleFontSize(18);
+    showToast("Scripture font size reset to 18px");
+  };
 
   // Verse Range Filter & Selection State (null = All Verses)
   const [verseStartFilter, setVerseStartFilter] = useState<number | null>(
@@ -2612,76 +2799,316 @@ ${transitionHtml}`;
             )}
           </div>
 
-          <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap">
+          <span className="hidden lg:inline text-xs text-slate-400 whitespace-nowrap">
             {saveStatus}
           </span>
         </div>
 
-        {/* Center: Split Layout Ratio Controls */}
-        <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 shrink-0">
-          <button
-            type="button"
-            onClick={() => setBibleSplitPercent(65)}
-            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
-              bibleSplitPercent === 65
-                ? "bg-white shadow-xs text-amber-900 font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Columns className="w-3.5 h-3.5" />
-            <span>Bible 65%</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBibleSplitPercent(50)}
-            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
-              bibleSplitPercent === 50
-                ? "bg-white shadow-xs text-amber-900 font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Columns className="w-3.5 h-3.5" />
-            <span>Split 50/50</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBibleSplitPercent(35)}
-            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
-              bibleSplitPercent === 35
-                ? "bg-white shadow-xs text-amber-900 font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Columns className="w-3.5 h-3.5" />
-            <span>Notes 65%</span>
-          </button>
+        {/* Center: Uncrowded Tablet & Desktop Split Orientation + Ratio Controls */}
+        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 shrink-0">
+          {/* 1-Tap Orientation Switcher (Side-by-Side vs Stacked Top/Bottom — ideal for Tablets) */}
           <button
             type="button"
             onClick={() =>
-              setBibleSplitPercent((prev) => (prev === 0 ? 50 : 0))
+              setWorkspaceSplitDirection((prev) =>
+                prev === "side-by-side" ? "top-bottom" : "side-by-side"
+              )
             }
-            className={`px-2 py-1 rounded transition-colors flex items-center gap-1 whitespace-nowrap ${
-              bibleSplitPercent === 0
+            className="px-2.5 py-1 rounded-lg bg-white hover:bg-amber-50 text-slate-800 border border-slate-200/80 shadow-2xs flex items-center gap-1.5 whitespace-nowrap transition-colors mr-0.5"
+            title={
+              workspaceSplitDirection === "side-by-side"
+                ? "Switch to Top & Bottom Stacked Split (Great for Portrait Tablets)"
+                : "Switch to Side-by-Side Left/Right Split (Great for Landscape Tablets)"
+            }
+          >
+            <Columns
+              className={`w-3.5 h-3.5 text-amber-800 transition-transform ${
+                workspaceSplitDirection === "top-bottom" ? "rotate-90" : ""
+              }`}
+            />
+            <span className="font-semibold text-amber-950">
+              {workspaceSplitDirection === "top-bottom"
+                ? "Top / Bottom"
+                : "Side-by-Side"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBibleSplitPercent(65);
+              setMobileSplitMode("65-35");
+              setMobileBiblePercent(65);
+            }}
+            className={`px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${
+              (isStackedSplit
+                ? mobileSplitMode === "65-35"
+                : bibleSplitPercent === 65)
+                ? "bg-white shadow-xs text-amber-900 font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            title="65% Scripture / 35% Sermon Notes"
+          >
+            <span>65/35</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBibleSplitPercent(50);
+              setMobileSplitMode("50-50");
+              setMobileBiblePercent(50);
+            }}
+            className={`px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${
+              (isStackedSplit
+                ? mobileSplitMode === "50-50"
+                : bibleSplitPercent === 50)
+                ? "bg-white shadow-xs text-amber-900 font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            title="Equal 50/50 Split"
+          >
+            <span>50/50</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBibleSplitPercent(35);
+              setMobileSplitMode("35-65");
+              setMobileBiblePercent(35);
+            }}
+            className={`px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${
+              (isStackedSplit
+                ? mobileSplitMode === "35-65"
+                : bibleSplitPercent === 35)
+                ? "bg-white shadow-xs text-amber-900 font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            title="35% Scripture / 65% Sermon Notes"
+          >
+            <span>35/65</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isStackedSplit) {
+                setMobileSplitMode((prev) =>
+                  prev === "bible-only" ? "50-50" : "bible-only"
+                );
+              } else {
+                setBibleSplitPercent((prev) => (prev === 100 ? 50 : 100));
+              }
+            }}
+            className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap ${
+              (isStackedSplit
+                ? mobileSplitMode === "bible-only"
+                : bibleSplitPercent === 100)
                 ? "bg-amber-800 text-white shadow-xs font-semibold"
                 : "text-slate-600 hover:text-slate-900"
             }`}
-            title="Maximize Sermon Notes & Outline to 100% width"
+            title="Maximize Scripture Reader to 100%"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Full</span>
+            <span>Bible</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isStackedSplit) {
+                setMobileSplitMode((prev) =>
+                  prev === "notes-only" ? "50-50" : "notes-only"
+                );
+              } else {
+                setBibleSplitPercent((prev) => (prev === 0 ? 50 : 0));
+              }
+            }}
+            className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap ${
+              (isStackedSplit
+                ? mobileSplitMode === "notes-only"
+                : bibleSplitPercent === 0)
+                ? "bg-amber-800 text-white shadow-xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            title="Maximize Sermon Notes & Outline to 100%"
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Full Notes</span>
+            <span className="hidden xl:inline">Full</span>
+            <span>Notes</span>
           </button>
+
+          <div className="h-4 w-px bg-slate-200 mx-0.5" />
+
+          {/* Scripture Reader Font Size Control in Top Toolbar */}
+          <div
+            className="flex items-center bg-white rounded-lg border border-slate-200/90 p-0.5 shadow-2xs"
+            title="Adjust Scripture Reader Font Size"
+          >
+            <button
+              type="button"
+              onClick={decreaseBibleFontSize}
+              disabled={bibleFontSize <= 14}
+              aria-label="Decrease Scripture font size"
+              title="Decrease Scripture text size (A-)"
+              className="px-1.5 py-0.5 rounded text-[11px] font-serif font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-900 disabled:opacity-35 transition-colors"
+            >
+              A&minus;
+            </button>
+            <button
+              type="button"
+              onClick={resetBibleFontSize}
+              title="Current Scripture text size (Tap to reset to 18px)"
+              className="px-1.5 py-0.5 text-[10px] font-mono font-semibold text-amber-900 hover:bg-amber-50 rounded transition-colors"
+            >
+              {bibleFontSize}px
+            </button>
+            <button
+              type="button"
+              onClick={increaseBibleFontSize}
+              disabled={bibleFontSize >= 28}
+              aria-label="Increase Scripture font size"
+              title="Increase Scripture text size (A+)"
+              className="px-1.5 py-0.5 rounded text-xs font-serif font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-900 disabled:opacity-35 transition-colors"
+            >
+              A+
+            </button>
+          </div>
         </div>
 
         {/* Right: Primary Workspace Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setMobileShowBible((v) => !v)}
-            className="md:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-amber-800" />
-            <span>{mobileShowBible ? "Hide Bible" : "Show Bible"}</span>
-          </button>
+          {/* Mobile Top/Bottom Split Screen Mode Selector */}
+          <div className="md:hidden relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileSplitMenu((v) => !v);
+                setShowQuickJumpMenu(false);
+                setShowExportMenu(false);
+                setShowSermonMenu(false);
+              }}
+              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 flex items-center gap-1.5 whitespace-nowrap shadow-2xs transition-colors"
+              title="Mobile Top/Bottom Split Screen View Options"
+            >
+              <Columns className="w-3.5 h-3.5 text-amber-800 rotate-90" />
+              <span>
+                {mobileSplitMode === "bible-only"
+                  ? "Full Bible"
+                  : mobileSplitMode === "notes-only"
+                  ? "Full Notes"
+                  : mobileSplitMode === "65-35"
+                  ? "Top 65%"
+                  : mobileSplitMode === "35-65"
+                  ? "Bottom 65%"
+                  : "Split 50/50"}
+              </span>
+              <ChevronDown className="w-3 h-3 text-amber-800" />
+            </button>
+
+            {showMobileSplitMenu && (
+              <div className="absolute right-0 mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs font-sans">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                  Mobile Split Screen Layout
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("50-50");
+                    setMobileBiblePercent(50);
+                    setShowMobileSplitMenu(false);
+                    showToast("Mobile view: Equal 50/50 Top & Bottom Split");
+                  }}
+                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-amber-50 ${
+                    mobileSplitMode === "50-50"
+                      ? "bg-amber-50/90 font-bold text-amber-950"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] px-1 rounded bg-slate-100 text-slate-700 font-bold">50/50</span>
+                    <span>Equal Split (Top &amp; Bottom)</span>
+                  </div>
+                  {mobileSplitMode === "50-50" && <Check className="w-3.5 h-3.5 text-amber-800" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("65-35");
+                    setMobileBiblePercent(65);
+                    setShowMobileSplitMenu(false);
+                    showToast("Mobile view: Top Focus (65% Scripture / 35% Notes)");
+                  }}
+                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-amber-50 ${
+                    mobileSplitMode === "65-35"
+                      ? "bg-amber-50/90 font-bold text-amber-950"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] px-1 rounded bg-amber-100 text-amber-900 font-bold">65/35</span>
+                    <span>Top Focus (Scripture Reading)</span>
+                  </div>
+                  {mobileSplitMode === "65-35" && <Check className="w-3.5 h-3.5 text-amber-800" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("35-65");
+                    setMobileBiblePercent(35);
+                    setShowMobileSplitMenu(false);
+                    showToast("Mobile view: Bottom Focus (35% Scripture / 65% Notes)");
+                  }}
+                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-amber-50 ${
+                    mobileSplitMode === "35-65"
+                      ? "bg-amber-50/90 font-bold text-amber-950"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] px-1 rounded bg-amber-100 text-amber-900 font-bold">35/65</span>
+                    <span>Bottom Focus (Sermon Writing)</span>
+                  </div>
+                  {mobileSplitMode === "35-65" && <Check className="w-3.5 h-3.5 text-amber-800" />}
+                </button>
+                <div className="border-t border-slate-100 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("bible-only");
+                    setShowMobileSplitMenu(false);
+                    showToast("Mobile view: Full Screen Scripture Reader");
+                  }}
+                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-amber-50 ${
+                    mobileSplitMode === "bible-only"
+                      ? "bg-amber-50/90 font-bold text-amber-950"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <span>Full Screen Scripture (100% Top)</span>
+                  {mobileSplitMode === "bible-only" && <Check className="w-3.5 h-3.5 text-amber-800" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("notes-only");
+                    setShowMobileSplitMenu(false);
+                    showToast("Mobile view: Full Screen Sermon Notes");
+                  }}
+                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-amber-50 ${
+                    mobileSplitMode === "notes-only"
+                      ? "bg-amber-50/90 font-bold text-amber-950"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <span>Full Screen Notes (100% Bottom)</span>
+                  {mobileSplitMode === "notes-only" && <Check className="w-3.5 h-3.5 text-amber-800" />}
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Quick Jump Workflow Dropdown Menu */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -2697,7 +3124,7 @@ ${transitionHtml}`;
                   ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
                   : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800"
               }`}
-              title="Quick Jump between Manuscript, Notes Organizer, and Preach Mode"
+              title="Quick Jump between Manuscript, Notes Organizer, Outline, Features, Guide, and Preach Mode"
             >
               <Layers className="w-3.5 h-3.5 text-amber-800" />
               <span>Quick Jump</span>
@@ -2835,6 +3262,7 @@ ${transitionHtml}`;
             )}
           </div>
 
+          {/* Standalone Features & How To Use buttons only on ultra-wide desktop (2xl+) so tablet header stays calm */}
           <button
             type="button"
             onClick={() =>
@@ -2842,7 +3270,7 @@ ${transitionHtml}`;
                 prev === "features" ? "manuscript" : "features"
               )
             }
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+            className={`hidden 2xl:flex px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border items-center gap-1.5 transition-colors whitespace-nowrap ${
               editorViewMode === "features"
                 ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -2860,7 +3288,7 @@ ${transitionHtml}`;
                 prev === "howto" ? "manuscript" : "howto"
               )
             }
-            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+            className={`hidden 2xl:flex px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border items-center gap-1.5 transition-colors whitespace-nowrap ${
               editorViewMode === "howto"
                 ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -2923,145 +3351,113 @@ ${transitionHtml}`;
         </div>
       </header>
 
-      {/* MAIN SPLIT WORKSPACE */}
-      <main className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
-        {/* ============================================== */}
-        {/* LEFT PANE: SCRIPTURE & EXEGESIS COMPANION      */}
-        {/* ============================================== */}
+      {/* MAIN SPLIT WORKSPACE (Adaptive for Tablet/Desktop Side-by-Side or Top/Bottom Split) */}
+      <main
+        ref={mainContainerRef}
+        className={`flex-1 min-h-0 flex ${
+          isStackedSplit ? "flex-col" : "flex-row"
+        } overflow-hidden relative`}
+      >
+        {/* ======================================================== */}
+        {/* TOP PANE (STACKED) / LEFT PANE (SIDE-BY-SIDE): SCRIPTURE  */}
+        {/* ======================================================== */}
         <section
           style={{
-            width:
-              typeof window !== "undefined" && window.innerWidth >= 768
-                ? `${bibleSplitPercent}%`
-                : undefined,
+            width: !isStackedSplit ? `${bibleSplitPercent}%` : "100%",
+            height: isStackedSplit
+              ? mobileSplitMode === "notes-only"
+                ? 0
+                : mobileSplitMode === "bible-only"
+                ? "100%"
+                : `calc(${mobileBiblePercent}% - 14px)`
+              : "100%",
           }}
           className={`${
-            bibleSplitPercent === 0
+            !isStackedSplit && bibleSplitPercent === 0
               ? "hidden"
-              : mobileShowBible
-              ? "flex"
-              : "hidden md:flex"
-          } w-full md:h-full h-[38vh] min-h-0 flex-col bg-[#fcfaf7] border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden`}
+              : isStackedSplit && mobileSplitMode === "notes-only"
+              ? "hidden"
+              : "flex"
+          } min-h-0 flex-col bg-[#fcfaf7] ${
+            isStackedSplit ? "border-b" : "border-r"
+          } border-slate-200 overflow-hidden relative`}
         >
-          {/* Bible Controls Header */}
-          <div className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2.5 flex-none relative">
-            {/* Book, Chapter, Verse Range & Translation Selectors */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Book Selector */}
-              <div className="flex-1 min-w-[125px]">
-                <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                  Book
-                </label>
-                <select
-                  value={bibleBook}
-                  onChange={(e) =>
-                    loadBiblePassage(e.target.value, 1, bibleVersion, null, null)
-                  }
-                  className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
-                >
-                  {BIBLE_BOOK_GROUPS.map((group) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.books.map((b) => (
-                        <option key={b} value={b}>
-                          {b}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-
-              {/* Chapter Selector Dropdown */}
-              <div className="w-20">
-                <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                  Chapter
-                </label>
-                <select
-                  value={bibleChapter}
-                  onChange={(e) =>
-                    loadBiblePassage(
-                      bibleBook,
-                      parseInt(e.target.value, 10) || 1,
-                      bibleVersion,
-                      null,
-                      null
-                    )
-                  }
-                  className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
-                >
-                  {chapterOptions.map((ch) => (
-                    <option key={ch} value={ch}>
-                      Ch. {ch}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Start Verse Selector Dropdown */}
-              <div className="w-24">
-                <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                  From Verse
-                </label>
-                <select
-                  value={verseStartFilter ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value
-                      ? parseInt(e.target.value, 10)
-                      : null;
-                    const nextEnd =
-                      val === null
-                        ? null
-                        : verseEndFilter !== null && verseEndFilter >= val
-                        ? verseEndFilter
-                        : val;
-                    applyVerseRangeSelection(val, nextEnd);
+          {/* Bible Controls Header (Calm, Uncrowded Single-Row Navigation for Tablet & Desktop) */}
+          <div className="px-3 py-2 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none relative">
+            {/* Unified Primary Scripture Navigation Row */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                {/* Interactive Passage Picker Pill (Opens 3-Step Book / Chapter / Verse Grid) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setGridPickerTab("chapter");
+                    setShowGridPicker((v) => !v);
                   }}
-                  className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
+                  className={`px-3 py-1.5 rounded-xl border font-serif font-bold text-xs sm:text-sm flex items-center gap-1.5 truncate shadow-2xs transition-colors ${
+                    showGridPicker
+                      ? "bg-amber-800 text-white border-amber-800"
+                      : "bg-amber-50/90 hover:bg-amber-100/90 text-amber-950 border-amber-200"
+                  }`}
+                  title="Tap to pick Book, Chapter, or Verse Range"
                 >
-                  <option value="">All Verses</option>
-                  {passageVerses.map((v) => (
-                    <option key={v.v} value={v.v}>
-                      v. {v.v}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <BookOpen
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      showGridPicker ? "text-amber-200" : "text-amber-800"
+                    }`}
+                  />
+                  <span className="truncate">{activeReferenceBadge}</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      showGridPicker ? "text-amber-200" : "text-amber-700"
+                    }`}
+                  />
+                </button>
 
-              {/* End Verse Selector Dropdown */}
-              <div className="w-22">
-                <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                  To Verse
-                </label>
-                <select
-                  value={verseEndFilter ?? verseStartFilter ?? ""}
-                  disabled={verseStartFilter === null}
-                  onChange={(e) => {
-                    const val = e.target.value
-                      ? parseInt(e.target.value, 10)
-                      : verseStartFilter;
-                    applyVerseRangeSelection(verseStartFilter, val);
-                  }}
-                  className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 disabled:opacity-50"
-                >
-                  {verseStartFilter === null ? (
-                    <option value="">—</option>
-                  ) : (
-                    passageVerses
-                      .filter((v) => v.v >= verseStartFilter)
-                      .map((v) => (
-                        <option key={v.v} value={v.v}>
-                          v. {v.v}
-                        </option>
-                      ))
-                  )}
-                </select>
-              </div>
+                {/* Prev / Next Chapter Buttons */}
+                <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200 shrink-0">
+                  <button
+                    type="button"
+                    disabled={bibleChapter <= 1}
+                    onClick={() => {
+                      if (bibleChapter > 1) {
+                        loadBiblePassage(
+                          bibleBook,
+                          bibleChapter - 1,
+                          bibleVersion,
+                          null,
+                          null
+                        );
+                      }
+                    }}
+                    className="p-1 text-slate-600 hover:text-slate-900 disabled:opacity-30 rounded-md hover:bg-white transition-colors"
+                    title="Previous chapter"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bibleChapter >= totalChaptersForBook}
+                    onClick={() => {
+                      if (bibleChapter < totalChaptersForBook) {
+                        loadBiblePassage(
+                          bibleBook,
+                          bibleChapter + 1,
+                          bibleVersion,
+                          null,
+                          null
+                        );
+                      }
+                    }}
+                    className="p-1 text-slate-600 hover:text-slate-900 disabled:opacity-30 rounded-md hover:bg-white transition-colors"
+                    title="Next chapter"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
 
-              {/* Translation Selector */}
-              <div className="w-20">
-                <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                  Version
-                </label>
+                {/* Compact Translation Selector */}
                 <select
                   value={bibleVersion}
                   onChange={(e) =>
@@ -3073,7 +3469,8 @@ ${transitionHtml}`;
                       verseEndFilter
                     )
                   }
-                  className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
+                  aria-label="Bible Translation Version"
+                  className="text-xs font-semibold bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 shrink-0"
                 >
                   <option value="WEB">WEB</option>
                   <option value="KJV">KJV</option>
@@ -3082,29 +3479,199 @@ ${transitionHtml}`;
                 </select>
               </div>
 
-              {/* Visual Chapter & Verse Grid Picker Trigger */}
-              <div
-                className="pt-4 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
+              {/* Right-Side Scripture Bar Actions (Includes Font Size Control + Search + Selects + Sync) */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Scripture Reader Font Size Control (A- / Size / A+) */}
+                <div
+                  className="inline-flex items-center bg-slate-100 rounded-lg border border-slate-200 p-0.5"
+                  title="Adjust Scripture Reader Font Size"
+                >
+                  <button
+                    type="button"
+                    onClick={decreaseBibleFontSize}
+                    disabled={bibleFontSize <= 14}
+                    aria-label="Decrease Scripture font size"
+                    title="Decrease Scripture text size (A-)"
+                    className="px-2 py-1 rounded-md text-xs font-serif font-bold text-slate-700 hover:bg-white hover:text-amber-950 disabled:opacity-35 transition-colors"
+                  >
+                    A&minus;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetBibleFontSize}
+                    title="Current Scripture text size (Tap to reset to 18px)"
+                    className="px-1.5 py-1 text-[11px] font-mono font-semibold text-amber-950 hover:bg-white rounded-md transition-colors"
+                  >
+                    {bibleFontSize}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={increaseBibleFontSize}
+                    disabled={bibleFontSize >= 28}
+                    aria-label="Increase Scripture font size"
+                    title="Increase Scripture text size (A+)"
+                    className="px-2 py-1 rounded-md text-xs font-serif font-bold text-slate-700 hover:bg-white hover:text-amber-950 disabled:opacity-35 transition-colors"
+                  >
+                    A+
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setGridPickerTab("chapter");
-                    setShowGridPicker((v) => !v);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap ${
-                    showGridPicker
-                      ? "bg-amber-800 text-white border-amber-800"
-                      : "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200"
+                  onClick={() => setShowMobileQuickJumps((v) => !v)}
+                  className={`px-2.5 py-1.5 text-xs rounded-lg border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    showMobileQuickJumps
+                      ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
                   }`}
-                  title="Open visual Chapter & Verse grid selector"
+                  title="Toggle Quick Passages & Reference Search"
                 >
-                  <Grid className="w-3.5 h-3.5" />
-                  <span>Ch / Verse Grid</span>
+                  <Search className="w-3.5 h-3.5 text-amber-800" />
+                  <span className="hidden sm:inline">Search</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowClassicBibleDropdowns((v) => !v)}
+                  className={`px-2.5 py-1.5 text-xs rounded-lg border flex items-center gap-1 transition-colors whitespace-nowrap ${
+                    showClassicBibleDropdowns
+                      ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
+                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                  }`}
+                  title="Toggle Book, Chapter & Verse Range Dropdown Selectors"
+                >
+                  <Filter className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="hidden lg:inline">Selects</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    syncSermonToChosenScripture({ runAiEnrichment: false })
+                  }
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors whitespace-nowrap"
+                  title={`Use ${activeReferenceBadge} for Sermon`}
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Sync Sermon</span>
                 </button>
               </div>
             </div>
+
+            {/* Collapsible Classic Book, Chapter & Verse Range Dropdowns (Toggled on demand so Tablet stays uncrowded) */}
+            {showClassicBibleDropdowns && (
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100">
+                {/* Book Selector */}
+                <div className="flex-1 min-w-[130px]">
+                  <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                    Book
+                  </label>
+                  <select
+                    value={bibleBook}
+                    onChange={(e) =>
+                      loadBiblePassage(e.target.value, 1, bibleVersion, null, null)
+                    }
+                    className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
+                  >
+                    {BIBLE_BOOK_GROUPS.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.books.map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Chapter Selector Dropdown */}
+                <div className="w-22">
+                  <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                    Chapter
+                  </label>
+                  <select
+                    value={bibleChapter}
+                    onChange={(e) =>
+                      loadBiblePassage(
+                        bibleBook,
+                        parseInt(e.target.value, 10) || 1,
+                        bibleVersion,
+                        null,
+                        null
+                      )
+                    }
+                    className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
+                  >
+                    {chapterOptions.map((ch) => (
+                      <option key={ch} value={ch}>
+                        Ch. {ch}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Start Verse Selector Dropdown */}
+                <div className="w-24">
+                  <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                    From Verse
+                  </label>
+                  <select
+                    value={verseStartFilter ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                        ? parseInt(e.target.value, 10)
+                        : null;
+                      const nextEnd =
+                        val === null
+                          ? null
+                          : verseEndFilter !== null && verseEndFilter >= val
+                          ? verseEndFilter
+                          : val;
+                      applyVerseRangeSelection(val, nextEnd);
+                    }}
+                    className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700"
+                  >
+                    <option value="">All Verses</option>
+                    {passageVerses.map((v) => (
+                      <option key={v.v} value={v.v}>
+                        v. {v.v}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* End Verse Selector Dropdown */}
+                <div className="w-24">
+                  <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                    To Verse
+                  </label>
+                  <select
+                    value={verseEndFilter ?? verseStartFilter ?? ""}
+                    disabled={verseStartFilter === null}
+                    onChange={(e) => {
+                      const val = e.target.value
+                        ? parseInt(e.target.value, 10)
+                        : verseStartFilter;
+                      applyVerseRangeSelection(verseStartFilter, val);
+                    }}
+                    className="w-full text-xs font-mono font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 disabled:opacity-50"
+                  >
+                    {verseStartFilter === null ? (
+                      <option value="">—</option>
+                    ) : (
+                      passageVerses
+                        .filter((v) => v.v >= verseStartFilter)
+                        .map((v) => (
+                          <option key={v.v} value={v.v}>
+                            v. {v.v}
+                          </option>
+                        ))
+                    )}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Interactive Chapter & Verse Grid Popover */}
             {showGridPicker && (
@@ -3327,74 +3894,76 @@ ${transitionHtml}`;
               </div>
             )}
 
-            {/* Quick Jump References & Free-form Reference Search */}
-            <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 flex-wrap">
-              <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 text-[11px]">
-                <span className="text-slate-400 font-medium shrink-0">
-                  Passages:
-                </span>
-                {QUICK_JUMP_REFS.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={async () => {
-                      const loaded = await loadBiblePassage(
-                        item.book,
-                        item.chapter,
-                        bibleVersion,
-                        item.verseStart,
-                        item.verseEnd
-                      );
-                      await syncSermonToChosenScripture({
-                        book: item.book,
-                        chapter: item.chapter,
-                        version: bibleVersion,
-                        vStart: item.verseStart,
-                        vEnd: item.verseEnd,
-                        versesList: loaded,
-                        runAiEnrichment: false,
-                      });
+            {/* Collapsible Quick Jump References & Free-form Reference Search */}
+            {showMobileQuickJumps && (
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 flex-wrap">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[11px]">
+                  <span className="text-slate-400 font-medium shrink-0">
+                    Passages:
+                  </span>
+                  {QUICK_JUMP_REFS.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={async () => {
+                        const loaded = await loadBiblePassage(
+                          item.book,
+                          item.chapter,
+                          bibleVersion,
+                          item.verseStart,
+                          item.verseEnd
+                        );
+                        await syncSermonToChosenScripture({
+                          book: item.book,
+                          chapter: item.chapter,
+                          version: bibleVersion,
+                          vStart: item.verseStart,
+                          vEnd: item.verseEnd,
+                          versesList: loaded,
+                          runAiEnrichment: false,
+                        });
+                      }}
+                      className={`px-2 py-0.5 rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                        bibleBook === item.book &&
+                        bibleChapter === item.chapter &&
+                        verseStartFilter === item.verseStart
+                          ? "bg-amber-100/80 border-amber-300 text-amber-950 font-semibold"
+                          : "bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={quickSearchQuery}
+                    onChange={(e) => setQuickSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        parseAndLoadReference(quickSearchQuery, true);
+                      }
                     }}
-                    className={`px-2 py-0.5 rounded-md border transition-colors whitespace-nowrap shrink-0 ${
-                      bibleBook === item.book &&
-                      bibleChapter === item.chapter &&
-                      verseStartFilter === item.verseStart
-                        ? "bg-amber-100/80 border-amber-300 text-amber-950 font-semibold"
-                        : "bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200"
-                    }`}
+                    placeholder="e.g. Romans 8:28 or John 3:16-18"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 w-48 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => parseAndLoadReference(quickSearchQuery, true)}
+                    className="p-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600"
+                    title="Open Passage & Sync Sermon"
                   >
-                    {item.label}
+                    <Search className="w-3.5 h-3.5" />
                   </button>
-                ))}
+                </div>
               </div>
+            )}
 
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  value={quickSearchQuery}
-                  onChange={(e) => setQuickSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      parseAndLoadReference(quickSearchQuery, true);
-                    }
-                  }}
-                  placeholder="e.g. Romans 8:28 or John 3:16-18"
-                  className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 w-44 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-700 select-text"
-                />
-                <button
-                  type="button"
-                  onClick={() => parseAndLoadReference(quickSearchQuery, true)}
-                  className="p-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  title="Open Passage & Sync Sermon"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Bible Sub-Tabs & Active Verse Selection Actions */}
+            {/* Bible Sub-Tabs & Active Verse Selection Actions (Clean, Tablet-Friendly Labels) */}
             <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 flex-wrap gap-2">
-              <div className="flex items-center gap-3.5 text-xs font-medium overflow-x-auto">
+              <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium overflow-x-auto no-scrollbar scroll-smooth">
                 <button
                   type="button"
                   onClick={() => setBibleTab("reader")}
@@ -3404,7 +3973,7 @@ ${transitionHtml}`;
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  Scripture Reader
+                  Reader
                 </button>
                 <button
                   type="button"
@@ -3442,7 +4011,7 @@ ${transitionHtml}`;
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  Cross-References &amp; Themes
+                  Themes &amp; Refs
                 </button>
                 <button
                   type="button"
@@ -3453,155 +4022,145 @@ ${transitionHtml}`;
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  Exegesis Scratchpad
+                  Exegesis
                 </button>
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs">
-                {verseStartFilter !== null && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterOnlyRange((v) => !v)}
-                    className={`px-2 py-0.5 rounded border text-[11px] font-medium flex items-center gap-1 transition-colors ${
-                      filterOnlyRange
-                        ? "bg-amber-100 border-amber-300 text-amber-950"
-                        : "bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900"
-                    }`}
-                    title="Toggle showing only the selected verse range vs full chapter"
-                  >
-                    <Filter className="w-3 h-3" />
-                    <span>
-                      {filterOnlyRange ? "Isolating Range" : "Isolate Verses"}
-                    </span>
-                  </button>
-                )}
+              {(verseStartFilter !== null || selectedVerses.length > 0) && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  {verseStartFilter !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterOnlyRange((v) => !v)}
+                      className={`px-2 py-0.5 rounded border text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                        filterOnlyRange
+                          ? "bg-amber-100 border-amber-300 text-amber-950"
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900"
+                      }`}
+                      title="Toggle showing only the selected verse range vs full chapter"
+                    >
+                      <Filter className="w-3 h-3" />
+                      <span>
+                        {filterOnlyRange ? "Isolating Range" : "Isolate"}
+                      </span>
+                    </button>
+                  )}
 
-                {selectedVerses.length > 0 && (
-                  <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-medium mr-0.5">
-                      Highlight:
-                    </span>
-                    {(
-                      [
-                        {
-                          color: "yellow",
-                          bg: "bg-yellow-300 border-yellow-400",
-                          label: "Yellow",
-                        },
-                        {
-                          color: "green",
-                          bg: "bg-emerald-300 border-emerald-400",
-                          label: "Green",
-                        },
-                        {
-                          color: "blue",
-                          bg: "bg-sky-300 border-sky-400",
-                          label: "Blue",
-                        },
-                      ] as const
-                    ).map((sw) => (
+                  {selectedVerses.length > 0 && (
+                    <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-medium mr-0.5">
+                        Highlight:
+                      </span>
+                      {(
+                        [
+                          {
+                            color: "yellow",
+                            bg: "bg-yellow-300 border-yellow-400",
+                            label: "Yellow",
+                          },
+                          {
+                            color: "green",
+                            bg: "bg-emerald-300 border-emerald-400",
+                            label: "Green",
+                          },
+                          {
+                            color: "blue",
+                            bg: "bg-sky-300 border-sky-400",
+                            label: "Blue",
+                          },
+                        ] as const
+                      ).map((sw) => (
+                        <button
+                          key={sw.color}
+                          type="button"
+                          onClick={() => {
+                            setHighlightedVerses((prev) => {
+                              const next = { ...prev };
+                              selectedVerses.forEach((vNum) => {
+                                next[`${bibleBook}-${bibleChapter}-${vNum}`] =
+                                  sw.color;
+                              });
+                              return next;
+                            });
+                            showToast(
+                              `Highlighted ${selectedVerses.length} verse(s) in ${sw.label.toLowerCase()}`
+                            );
+                          }}
+                          className={`w-3.5 h-3.5 rounded-full border ${sw.bg} hover:scale-110 transition-transform`}
+                          title={`Highlight selected verses in ${sw.label}`}
+                        />
+                      ))}
                       <button
-                        key={sw.color}
                         type="button"
                         onClick={() => {
                           setHighlightedVerses((prev) => {
                             const next = { ...prev };
                             selectedVerses.forEach((vNum) => {
-                              next[`${bibleBook}-${bibleChapter}-${vNum}`] =
-                                sw.color;
+                              delete next[`${bibleBook}-${bibleChapter}-${vNum}`];
                             });
                             return next;
                           });
-                          showToast(
-                            `Highlighted ${selectedVerses.length} verse(s) in ${sw.label.toLowerCase()}`
-                          );
                         }}
-                        className={`w-3.5 h-3.5 rounded-full border ${sw.bg} hover:scale-110 transition-transform`}
-                        title={`Highlight selected verses in ${sw.label}`}
-                      />
-                    ))}
+                        className="text-[10px] text-slate-400 hover:text-slate-700 ml-0.5 px-0.5"
+                        title="Clear highlight on selected verses"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedVerses.length > 0 && (
                     <button
                       type="button"
                       onClick={() => {
-                        setHighlightedVerses((prev) => {
-                          const next = { ...prev };
+                        let addedCount = 0;
+                        setBookmarkedVerses((prev) => {
+                          const existingIds = new Set(prev.map((b) => b.id));
+                          const additions: BookmarkedVerse[] = [];
                           selectedVerses.forEach((vNum) => {
-                            delete next[`${bibleBook}-${bibleChapter}-${vNum}`];
+                            const id = `${bibleBook}-${bibleChapter}-${vNum}`;
+                            const found = passageVerses.find((v) => v.v === vNum);
+                            if (!existingIds.has(id) && found) {
+                              addedCount++;
+                              additions.push({
+                                id,
+                                book: bibleBook,
+                                chapter: bibleChapter,
+                                verse: vNum,
+                                version: bibleVersion,
+                                text: found.text,
+                                note: "",
+                                createdAt: new Date().toISOString().split("T")[0],
+                              });
+                            }
                           });
-                          return next;
+                          return [...additions, ...prev];
                         });
+                        showToast(
+                          addedCount > 0
+                            ? `Bookmarked ${addedCount} selected verse(s)`
+                            : "Selected verse(s) already bookmarked"
+                        );
                       }}
-                      className="text-[10px] text-slate-400 hover:text-slate-700 ml-0.5 px-0.5"
-                      title="Clear highlight on selected verses"
+                      className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap"
+                      title="Bookmark selected verses"
                     >
-                      &times;
+                      <Bookmark className="w-3 h-3" />
+                      <span>Bookmark ({selectedVerses.length})</span>
                     </button>
-                  </div>
-                )}
+                  )}
 
-                {selectedVerses.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      let addedCount = 0;
-                      setBookmarkedVerses((prev) => {
-                        const existingIds = new Set(prev.map((b) => b.id));
-                        const additions: BookmarkedVerse[] = [];
-                        selectedVerses.forEach((vNum) => {
-                          const id = `${bibleBook}-${bibleChapter}-${vNum}`;
-                          const found = passageVerses.find((v) => v.v === vNum);
-                          if (!existingIds.has(id) && found) {
-                            addedCount++;
-                            additions.push({
-                              id,
-                              book: bibleBook,
-                              chapter: bibleChapter,
-                              verse: vNum,
-                              version: bibleVersion,
-                              text: found.text,
-                              note: "",
-                              createdAt: new Date().toISOString().split("T")[0],
-                            });
-                          }
-                        });
-                        return [...additions, ...prev];
-                      });
-                      showToast(
-                        addedCount > 0
-                          ? `Bookmarked ${addedCount} selected verse(s)`
-                          : "Selected verse(s) already bookmarked"
-                      );
-                    }}
-                    className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap"
-                    title="Bookmark selected verses"
-                  >
-                    <Bookmark className="w-3 h-3" />
-                    <span>Bookmark ({selectedVerses.length})</span>
-                  </button>
-                )}
-
-                {selectedVerses.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleInsertSelectedVerses}
-                    className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-950 rounded text-[11px] font-semibold whitespace-nowrap"
-                  >
-                    Quote ({selectedVerses.length}v)
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    syncSermonToChosenScripture({ runAiEnrichment: false })
-                  }
-                  className="px-2.5 py-0.5 bg-amber-800 hover:bg-amber-900 text-white rounded text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap"
-                  title="Update Sermon Title, Big Idea, Intro Illustration, and Manuscript from this chosen Scripture passage"
-                >
-                  <Wand2 className="w-3 h-3" />
-                  <span>Use {activeReferenceBadge} for Sermon</span>
-                </button>
-              </div>
+                  {selectedVerses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleInsertSelectedVerses}
+                      className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-950 rounded text-[11px] font-semibold whitespace-nowrap"
+                    >
+                      Quote ({selectedVerses.length}v)
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -3727,7 +4286,13 @@ ${transitionHtml}`;
                     </p>
                   </div>
                 ) : (
-                  <div className="font-serif text-slate-800 leading-relaxed text-base space-y-1.5 select-text">
+                  <div
+                    style={{
+                      fontSize: `${bibleFontSize}px`,
+                      lineHeight: 1.75,
+                    }}
+                    className="font-serif text-slate-800 space-y-2 select-text transition-[font-size] duration-150"
+                  >
                     {displayedVerses.map((v, vIdx) => {
                       const isSelected = selectedVerses.includes(v.v);
                       const isPopoverOpen = activeVersePopoverNum === v.v;
@@ -3782,7 +4347,7 @@ ${transitionHtml}`;
                           }`}
                         >
                           <div className="flex items-start gap-2.5">
-                            <div className="flex items-center gap-1 flex-none mt-0.5">
+                            <div className="flex items-center gap-1 flex-none mt-1">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -3799,7 +4364,9 @@ ${transitionHtml}`;
                                     prev === v.v ? null : v.v
                                   );
                                 }}
-                                className={`relative text-xs font-mono font-bold px-1.5 py-0.5 rounded select-none transition-all cursor-pointer ${
+                                className={`relative ${
+                                  bibleFontSize >= 22 ? "text-sm" : "text-xs"
+                                } font-mono font-bold px-1.5 py-0.5 rounded select-none transition-all cursor-pointer ${
                                   isPopoverOpen
                                     ? "bg-amber-900 text-white ring-2 ring-amber-400 shadow-xs"
                                     : isSelected
@@ -5098,37 +5665,160 @@ ${transitionHtml}`;
               </div>
             )}
           </div>
+
+          {/* Floating Pill when in Full Bible mode to restore split screen */}
+          {((isStackedSplit && mobileSplitMode === "bible-only") ||
+            (!isStackedSplit && bibleSplitPercent === 100)) && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSplitMode("50-50");
+                  setMobileBiblePercent(50);
+                  setBibleSplitPercent(50);
+                  showToast("Restored 50/50 Split View");
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-amber-900 hover:bg-amber-950 text-white text-xs font-semibold shadow-lg border border-amber-700 flex items-center gap-1.5 transition-transform active:scale-95"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Open Sermon Notes (50/50 Split)</span>
+              </button>
+            </div>
+          )}
         </section>
 
-        {/* ============================================== */}
-        {/* RIGHT PANE: SERMON NOTES & MANUSCRIPT BUILDER  */}
-        {/* ============================================== */}
+        {/* ======================================================== */}
+        {/* INTERACTIVE TOP/BOTTOM SPLIT RESIZER DIVIDER BAR          */}
+        {/* ======================================================== */}
+        {isStackedSplit &&
+          mobileSplitMode !== "bible-only" &&
+          mobileSplitMode !== "notes-only" && (
+            <div
+              onMouseDown={handleDividerMouseDown}
+              onTouchStart={handleDividerTouchStart}
+              onTouchMove={handleDividerTouchMove}
+              onTouchEnd={handleDividerTouchEnd}
+              className={`h-7 bg-amber-50/95 border-y border-amber-200/90 flex items-center justify-between px-3 select-none touch-none cursor-row-resize shrink-0 z-20 shadow-2xs transition-colors ${
+                isDraggingMobileSplit ? "bg-amber-100 ring-1 ring-amber-400" : ""
+              }`}
+              title="Drag up or down to adjust Top/Bottom split height"
+            >
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("bible-only");
+                    showToast("Maximized Scripture Reader");
+                  }}
+                  className="text-[10px] font-semibold text-amber-900 hover:text-amber-950 bg-white/90 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-0.5 active:bg-amber-100"
+                  title="Maximize Scripture to Full Screen"
+                >
+                  <ArrowUp className="w-2.5 h-2.5" />
+                  <span>Full Bible</span>
+                </button>
+              </div>
+
+              {/* Center Touch Drag Pill Handle */}
+              <div className="flex items-center gap-1.5 py-0.5 px-2.5 rounded-full bg-amber-100/70 border border-amber-300/60">
+                <div className="w-4 h-1 rounded-full bg-amber-700/50" />
+                <span className="text-[10px] font-mono font-bold text-amber-950 tracking-tight">
+                  {mobileBiblePercent}% Top · {100 - mobileBiblePercent}% Bottom
+                </span>
+                <div className="w-4 h-1 rounded-full bg-amber-700/50" />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("50-50");
+                    setMobileBiblePercent(50);
+                    showToast("Reset to 50/50 Top & Bottom Split");
+                  }}
+                  className={`text-[10px] font-semibold rounded px-2 py-0.5 border ${
+                    mobileBiblePercent === 50 && mobileSplitMode === "50-50"
+                      ? "bg-amber-800 text-white border-amber-800"
+                      : "bg-white/90 border-amber-200 text-amber-900"
+                  }`}
+                  title="Reset to 50/50 Split"
+                >
+                  50/50
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSplitMode("notes-only");
+                    showToast("Maximized Sermon Notes");
+                  }}
+                  className="text-[10px] font-semibold text-amber-900 hover:text-amber-950 bg-white/90 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-0.5 active:bg-amber-100"
+                  title="Maximize Sermon Notes to Full Screen"
+                >
+                  <span>Full Notes</span>
+                  <ArrowDown className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* ======================================================== */}
+        {/* BOTTOM PANE (STACKED) / RIGHT PANE (SIDE-BY-SIDE): STUDIO */}
+        {/* ======================================================== */}
         <section
           style={{
-            width:
-              typeof window !== "undefined" && window.innerWidth >= 768
-                ? `${100 - bibleSplitPercent}%`
-                : undefined,
+            width: !isStackedSplit ? `${100 - bibleSplitPercent}%` : "100%",
+            height: isStackedSplit
+              ? mobileSplitMode === "bible-only"
+                ? 0
+                : mobileSplitMode === "notes-only"
+                ? "100%"
+                : `calc(${100 - mobileBiblePercent}% - 14px)`
+              : "100%",
           }}
-          className="w-full md:h-full flex-1 min-h-0 flex flex-col bg-white overflow-hidden"
+          className={`${
+            !isStackedSplit && bibleSplitPercent === 100
+              ? "hidden"
+              : isStackedSplit && mobileSplitMode === "bible-only"
+              ? "hidden"
+              : "flex"
+          } flex-1 min-h-0 flex-col bg-white overflow-hidden relative`}
         >
-          {/* Compact Sermon Metadata Header */}
-          <div className="px-3.5 py-2 bg-white border-b border-slate-200 flex-none space-y-1.5">
-            {/* Row 1: Sermon Title + Quick Controls + View Switcher Tabs */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                <input
-                  type="text"
-                  value={currentSermon.title}
-                  onChange={(e) =>
-                    updateCurrentSermon({ title: e.target.value })
-                  }
-                  className="flex-1 min-w-[140px] font-display text-base sm:text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:outline-none focus:ring-0 select-text"
-                  placeholder="Untitled Sermon"
-                />
+          {/* Floating Pill when in Full Notes mode to restore split screen */}
+          {((isStackedSplit && mobileSplitMode === "notes-only") ||
+            (!isStackedSplit && bibleSplitPercent === 0)) && (
+            <div className="absolute top-2.5 right-3 z-30">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSplitMode("50-50");
+                  setMobileBiblePercent(50);
+                  setBibleSplitPercent(50);
+                  showToast("Restored 50/50 Split View");
+                }}
+                className="px-2.5 py-1 rounded-full bg-amber-100/90 text-amber-950 text-[11px] font-semibold shadow-xs border border-amber-300 flex items-center gap-1 hover:bg-amber-200"
+              >
+                <BookOpen className="w-3 h-3 text-amber-800" />
+                <span>Show Bible (Split)</span>
+              </button>
+            </div>
+          )}
 
-                {/* Inline Scripture Passage Tag & Build Button */}
-                <div className="hidden sm:flex items-center gap-1 bg-amber-50/80 border border-amber-200/80 rounded-md px-2 py-0.5 text-xs shrink-0">
+          {/* Calm, Uncrowded Sermon Studio Header */}
+          <div className="px-3.5 py-2 bg-white border-b border-slate-200 flex-none space-y-2">
+            {/* Row 1: Sermon Title + Metadata Drawer Toggles */}
+            <div className="flex items-center justify-between gap-2">
+              <input
+                type="text"
+                value={currentSermon.title}
+                onChange={(e) =>
+                  updateCurrentSermon({ title: e.target.value })
+                }
+                className="flex-1 min-w-[140px] font-display text-base sm:text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:outline-none focus:ring-0 select-text truncate"
+                placeholder="Untitled Sermon"
+              />
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Inline Scripture Passage Tag & Sync on wide screens (also inside Big Idea & Setup drawer) */}
+                <div className="hidden xl:flex items-center gap-1 bg-amber-50/80 border border-amber-200/80 rounded-lg px-2 py-1 text-xs shrink-0">
                   <span className="text-[10px] font-semibold text-amber-800 uppercase">
                     Text:
                   </span>
@@ -5162,10 +5852,10 @@ ${transitionHtml}`;
                 <button
                   type="button"
                   onClick={() => setShowTitleSuggestions((v) => !v)}
-                  className={`px-2 py-0.5 rounded border text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
                     showTitleSuggestions
                       ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
-                      : "bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-900 border-slate-200"
+                      : "bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-900 border-slate-200"
                   }`}
                   title="Show or hide sermon title suggestions for the chosen Scripture"
                 >
@@ -5175,24 +5865,27 @@ ${transitionHtml}`;
                 <button
                   type="button"
                   onClick={() => setShowSermonSetupDetails((v) => !v)}
-                  className={`px-2 py-0.5 rounded border text-[11px] font-medium whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors ${
                     showSermonSetupDetails
                       ? "bg-amber-100 border-amber-300 text-amber-950 font-semibold"
-                      : "bg-slate-100 hover:bg-slate-200/70 text-slate-600 border-slate-200"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
                   }`}
-                  title="Toggle Big Idea, Homiletical Approach, Series & Date settings"
+                  title="Toggle Passage Text, Big Idea, Homiletical Approach, Series & Date settings"
                 >
-                  <span>Big Idea &amp; Setup</span>
+                  <span>Setup &amp; Big Idea</span>
                   <ChevronDown
-                    className={`w-3 h-3 transition-transform ${
+                    className={`w-3.5 h-3.5 transition-transform ${
                       showSermonSetupDetails ? "rotate-180" : ""
                     }`}
                   />
                 </button>
               </div>
+            </div>
 
-              {/* Manuscript vs Notes Organizer vs Outline View Segmented Control */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium border border-slate-200 shrink-0 overflow-x-auto max-w-full">
+            {/* Row 2: View Switcher Tabs (Left) + Voice & AI Homiletics Actions (Right, unclipped) */}
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-100">
+              {/* Segmented View Switcher with concise Tablet-friendly labels */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium border border-slate-200 shrink-0 overflow-x-auto no-scrollbar max-w-full">
                 <button
                   type="button"
                   onClick={() => setEditorViewMode("manuscript")}
@@ -5214,7 +5907,7 @@ ${transitionHtml}`;
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5 text-amber-800" />
-                  <span>Notes Organizer</span>
+                  <span>Organizer</span>
                 </button>
                 <button
                   type="button"
@@ -5225,7 +5918,7 @@ ${transitionHtml}`;
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Outline View
+                  Outline
                 </button>
                 <button
                   type="button"
@@ -5249,8 +5942,168 @@ ${transitionHtml}`;
                   }`}
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-amber-800" />
-                  <span>How To Use</span>
+                  <span>Guide</span>
                 </button>
+              </div>
+
+              {/* Primary Voice, TTS Read-Aloud & AI Homiletics Actions */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Manuscript Text-to-Speech (Listen / Pause / Stop) */}
+                <div className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-50/90 p-0.5 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={handleToggleTtsPlayPause}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                      isTtsPlaying && !isTtsPaused
+                        ? "bg-amber-800 text-white"
+                        : "text-amber-950 hover:bg-amber-100"
+                    }`}
+                    title="Listen to your drafted manuscript aloud to check spoken cadence and identify awkward phrasing"
+                  >
+                    {isTtsPlaying && !isTtsPaused ? (
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5 text-amber-800" />
+                    )}
+                    <span>
+                      {isTtsSynthesizing
+                        ? "Loading..."
+                        : isTtsPlaying && !isTtsPaused
+                        ? "Pause"
+                        : isTtsPlaying && isTtsPaused
+                        ? "Resume"
+                        : "Listen"}
+                    </span>
+                  </button>
+                  {(isTtsPlaying || showTtsPlayer) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopTtsPlayback();
+                        setShowTtsPlayer(false);
+                      }}
+                      className="p-1 rounded hover:bg-amber-200/70 text-amber-900"
+                      title="Stop Audio & Close Listener"
+                    >
+                      <Square className="w-3 h-3 fill-current" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    isDictating ? stopLiveDictation() : startLiveDictation()
+                  }
+                  className={`px-2.5 py-1 rounded-lg border font-semibold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                    isDictating
+                      ? "bg-rose-50 border-rose-300 text-rose-800"
+                      : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-950"
+                  }`}
+                  title="Voice Dictation into Manuscript"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>{isDictating ? "Listening..." : "Dictate"}</span>
+                </button>
+
+                {/* AI Homiletics Menu (Positioned outside overflow-x-auto so dropdown never clips) */}
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAiMenu((v) => !v)}
+                    disabled={!!aiLoadingTask}
+                    className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-200 font-semibold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-700" />
+                    <span>{aiLoadingTask || "AI Homiletics"}</span>
+                    <ChevronDown className="w-3 h-3 text-purple-500" />
+                  </button>
+
+                  {showAiMenu && (
+                    <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs">
+                      <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-100">
+                        Gemini Assistant ({currentSermon.passageTag})
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAiGenerateFullSermonFromText}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800 border-b border-slate-50"
+                      >
+                        <div className="font-semibold text-purple-950">
+                          Generate Full Sermon from {activeReferenceBadge}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Title ideas, Big Idea, Intro Illustration &amp;
+                          Manuscript
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAiOrganizeNotes()}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800 border-b border-slate-50"
+                      >
+                        <div className="font-semibold text-amber-900">
+                          Organize My Sermon Notes
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Arrange raw brainstormed notes into logical preaching
+                          order
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAiGenerateOutline}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
+                      >
+                        <div className="font-semibold text-slate-900">
+                          Generate Sermon Outline
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Build {currentSermon.homileticalMode} structure from{" "}
+                          {currentSermon.passageTag}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAiWordStudy}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
+                      >
+                        <div className="font-semibold text-slate-900">
+                          Original Language Word Study
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Greek &amp; Hebrew lexical nuances in{" "}
+                          {currentSermon.passageTag}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAiIllustration}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
+                      >
+                        <div className="font-semibold text-slate-900">
+                          Generate Intro Illustration &amp; Story
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Opening hook &amp; metaphor tailored to{" "}
+                          {currentSermon.passageTag}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAiPolish}
+                        className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
+                      >
+                        <div className="font-semibold text-slate-900">
+                          Pacing &amp; Flow Check
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Evaluate transitions and spoken cadence
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -5268,7 +6121,7 @@ ${transitionHtml}`;
                       updateCurrentSermon({ title: t });
                       showToast(`Applied sermon title: "${t}"`);
                     }}
-                    className={`text-[11px] px-2 py-0.5 rounded border transition-colors truncate max-w-[240px] ${
+                    className={`text-[11px] px-2 py-0.5 rounded border transition-colors truncate max-w-[260px] ${
                       currentSermon.title === t
                         ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold"
                         : "bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-600 hover:text-slate-900"
@@ -5281,14 +6134,46 @@ ${transitionHtml}`;
               </div>
             )}
 
-            {/* Collapsible Sermon Setup Drawer (Homiletical Mode, Series/Date & Big Idea) */}
+            {/* Collapsible Sermon Setup Drawer (Passage Tag, Homiletical Mode, Series/Date & Big Idea) */}
             {showSermonSetupDetails && (
               <div className="pt-2 border-t border-slate-100 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-slate-400 font-medium">
-                      Homiletical Approach:
-                    </span>
+                    {/* Passage Text Input inside Setup Drawer for Tablet convenience */}
+                    <div className="flex xl:hidden items-center gap-1 bg-amber-50/80 border border-amber-200/80 rounded-md px-2 py-0.5 text-xs">
+                      <span className="text-[10px] font-semibold text-amber-800 uppercase">
+                        Text:
+                      </span>
+                      <input
+                        type="text"
+                        value={currentSermon.passageTag}
+                        onChange={(e) =>
+                          updateCurrentSermon({ passageTag: e.target.value })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            parseAndLoadReference(
+                              currentSermon.passageTag,
+                              true
+                            );
+                          }
+                        }}
+                        placeholder="e.g. Romans 8:1-17"
+                        className="w-28 text-xs font-semibold text-amber-950 bg-transparent border-none p-0 focus:outline-none select-text"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          parseAndLoadReference(currentSermon.passageTag, true)
+                        }
+                        className="px-1.5 py-0.5 rounded bg-amber-800 hover:bg-amber-900 text-white text-[10px] font-semibold flex items-center gap-1"
+                      >
+                        <Wand2 className="w-2.5 h-2.5" />
+                        <span>Sync</span>
+                      </button>
+                    </div>
+
+                    <span className="text-slate-400 font-medium">Approach:</span>
                     <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
                       {(
                         [
@@ -5485,330 +6370,174 @@ ${transitionHtml}`;
             )}
           </div>
 
-          {/* Rich Text Formatting Toolbar (Shown in Manuscript mode to maximize space in Outline & Organizer views) */}
+          {/* Dedicated Manuscript Formatting & Pulpit Cues Bar (Uncrowded Single Line on Tablet) */}
           {editorViewMode === "manuscript" && (
-            <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-1.5 flex-wrap text-xs text-slate-600 flex-none">
-            <div className="flex items-center gap-1 flex-wrap">
-              <button
-                type="button"
-                onClick={() => execEditorFormat("bold")}
-                className="p-1.5 rounded hover:bg-slate-200 font-bold text-slate-700"
-                title="Bold"
-              >
-                B
-              </button>
-              <button
-                type="button"
-                onClick={() => execEditorFormat("italic")}
-                className="p-1.5 rounded hover:bg-slate-200 italic font-serif text-slate-700"
-                title="Italic"
-              >
-                I
-              </button>
-              <button
-                type="button"
-                onClick={() => execEditorFormat("underline")}
-                className="p-1.5 rounded hover:bg-slate-200 underline text-slate-700"
-                title="Underline"
-              >
-                U
-              </button>
-
-              <div className="h-4 w-px bg-slate-300 mx-1" />
-
-              <button
-                type="button"
-                onClick={() => execEditorFormat("formatBlock", "h1")}
-                className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
-                title="Main Point Heading (H1)"
-              >
-                H1
-              </button>
-              <button
-                type="button"
-                onClick={() => execEditorFormat("formatBlock", "h2")}
-                className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
-                title="Sub-Point Heading (H2)"
-              >
-                H2
-              </button>
-              <button
-                type="button"
-                onClick={() => execEditorFormat("formatBlock", "p")}
-                className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
-                title="Body Paragraph"
-              >
-                P
-              </button>
-
-              <div className="h-4 w-px bg-slate-300 mx-1" />
-
-              <button
-                type="button"
-                onClick={() => execEditorFormat("insertUnorderedList")}
-                className="p-1.5 rounded hover:bg-slate-200 text-slate-700"
-                title="Bullet List"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => execEditorFormat("insertOrderedList")}
-                className="p-1.5 rounded hover:bg-slate-200 text-slate-700"
-                title="Numbered List"
-              >
-                <ListOrdered className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const snippet = displayedVerses
-                    .slice(0, 3)
-                    .map((v) => `(${v.v}) ${v.text}`)
-                    .join(" ");
-                  insertHtmlAtCursor(
-                    `<blockquote class="scripture-quote">${activeReferenceBadge} (${bibleVersion}) — "${snippet}"</blockquote><p></p>`
-                  );
-                }}
-                className="p-1.5 rounded hover:bg-slate-200 text-amber-800"
-                title={`Insert Scripture Quote Block (${activeReferenceBadge})`}
-              >
-                <Quote className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const pkg = buildSermonPackageFromPassage({
-                    book: bibleBook,
-                    chapter: bibleChapter,
-                    version: bibleVersion,
-                    verses: passageVerses,
-                    mode: currentSermon.homileticalMode,
-                    verseStart: verseStartFilter,
-                    verseEnd: verseEndFilter,
-                  });
-                  insertHtmlAtCursor(
-                    `<blockquote class="illustration-box"><strong>Opening Illustration (${pkg.passageTag}):</strong> ${pkg.introIllustration}</blockquote><p></p>`
-                  );
-                  showToast(
-                    `Inserted intro illustration for ${pkg.passageTag}`
-                  );
-                }}
-                className="px-2 py-1 rounded hover:bg-blue-50 text-blue-700 font-medium flex items-center gap-1"
-                title="Insert Opening Intro Illustration based on chosen Scripture"
-              >
-                <Lightbulb className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Intro Illustration</span>
-              </button>
-            </div>
-
-            {/* Pulpit Cue Badges */}
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] text-slate-400 font-medium">
-                Cue:
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  insertHtmlAtCursor(
-                    ` <span class="cue-badge cue-slide">[SLIDE]</span> `
-                  )
-                }
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
-              >
-                [SLIDE]
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  insertHtmlAtCursor(
-                    ` <span class="cue-badge cue-pause">[PAUSE 3s]</span> `
-                  )
-                }
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-yellow-50 text-yellow-800 hover:bg-yellow-100 border border-yellow-200"
-              >
-                [PAUSE]
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  insertHtmlAtCursor(
-                    ` <span class="cue-badge cue-response">[RESPONSE]</span> `
-                  )
-                }
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
-              >
-                [RESPONSE]
-              </button>
-            </div>
-
-            {/* Voice Dictation, TTS Read-Aloud, Transcription Studio & AI Homiletics */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Manuscript Text-to-Speech (Listen / Pause / Stop) */}
-              <div className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50/90 p-0.5 shadow-2xs">
+            <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar text-xs text-slate-600 flex-none whitespace-nowrap">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={handleToggleTtsPlayPause}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-                    isTtsPlaying && !isTtsPaused
-                      ? "bg-amber-800 text-white"
-                      : "text-amber-950 hover:bg-amber-100"
-                  }`}
-                  title="Listen to your drafted manuscript aloud to check spoken cadence and identify awkward phrasing"
+                  onClick={() => execEditorFormat("bold")}
+                  className="p-1.5 rounded hover:bg-slate-200 font-bold text-slate-700"
+                  title="Bold"
                 >
-                  {isTtsPlaying && !isTtsPaused ? (
-                    <Pause className="w-3.5 h-3.5 fill-current" />
-                  ) : (
-                    <Volume2 className="w-3.5 h-3.5 text-amber-800" />
-                  )}
-                  <span>
-                    {isTtsSynthesizing
-                      ? "Loading Voice..."
-                      : isTtsPlaying && !isTtsPaused
-                      ? "Pause Audio"
-                      : isTtsPlaying && isTtsPaused
-                      ? "Resume Audio"
-                      : "Listen Manuscript"}
-                  </span>
+                  B
                 </button>
-                {(isTtsPlaying || showTtsPlayer) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      stopTtsPlayback();
-                      setShowTtsPlayer(false);
-                    }}
-                    className="p-1 rounded hover:bg-amber-200/70 text-amber-900"
-                    title="Stop Audio & Close Listener"
-                  >
-                    <Square className="w-3 h-3 fill-current" />
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  isDictating ? stopLiveDictation() : startLiveDictation()
-                }
-                className={`px-2.5 py-1 rounded-md border font-semibold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-                  isDictating
-                    ? "bg-rose-50 border-rose-300 text-rose-800"
-                    : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-950"
-                }`}
-              >
-                <Mic className="w-3.5 h-3.5" />
-                <span>{isDictating ? "Listening..." : "Dictate"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowTranscribeModal(true)}
-                className="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium whitespace-nowrap"
-              >
-                Transcribe Studio
-              </button>
-
-              {/* AI Homiletics Menu */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  onClick={() => setShowAiMenu((v) => !v)}
-                  disabled={!!aiLoadingTask}
-                  className="px-2.5 py-1 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-200 font-semibold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap"
+                  onClick={() => execEditorFormat("italic")}
+                  className="p-1.5 rounded hover:bg-slate-200 italic font-serif text-slate-700"
+                  title="Italic"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-purple-700" />
-                  <span>{aiLoadingTask || "AI Homiletics"}</span>
-                  <ChevronDown className="w-3 h-3 text-purple-500" />
+                  I
+                </button>
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("underline")}
+                  className="p-1.5 rounded hover:bg-slate-200 underline text-slate-700"
+                  title="Underline"
+                >
+                  U
                 </button>
 
-                {showAiMenu && (
-                  <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs">
-                    <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-100">
-                      Gemini Assistant ({currentSermon.passageTag})
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAiGenerateFullSermonFromText}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800 border-b border-slate-50"
-                    >
-                      <div className="font-semibold text-purple-950">
-                        Generate Full Sermon from {activeReferenceBadge}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Title ideas, Big Idea, Intro Illustration &amp;
-                        Manuscript
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAiOrganizeNotes()}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800 border-b border-slate-50"
-                    >
-                      <div className="font-semibold text-amber-900">
-                        Organize My Sermon Notes
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Arrange raw brainstormed notes into logical preaching
-                        order
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiGenerateOutline}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
-                    >
-                      <div className="font-semibold text-slate-900">
-                        Generate Sermon Outline
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Build {currentSermon.homileticalMode} structure from{" "}
-                        {currentSermon.passageTag}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiWordStudy}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
-                    >
-                      <div className="font-semibold text-slate-900">
-                        Original Language Word Study
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Greek &amp; Hebrew lexical nuances in{" "}
-                        {currentSermon.passageTag}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiIllustration}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
-                    >
-                      <div className="font-semibold text-slate-900">
-                        Generate Intro Illustration &amp; Story
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Opening hook &amp; metaphor tailored to{" "}
-                        {currentSermon.passageTag}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiPolish}
-                      className="w-full text-left px-3 py-2 hover:bg-purple-50/70 text-slate-800"
-                    >
-                      <div className="font-semibold text-slate-900">
-                        Pacing &amp; Flow Check
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Evaluate transitions and spoken cadence
-                      </div>
-                    </button>
-                  </div>
-                )}
+                <div className="h-4 w-px bg-slate-300 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("formatBlock", "h1")}
+                  className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
+                  title="Main Point Heading (H1)"
+                >
+                  H1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("formatBlock", "h2")}
+                  className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
+                  title="Sub-Point Heading (H2)"
+                >
+                  H2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("formatBlock", "p")}
+                  className="px-2 py-1 rounded hover:bg-slate-200 font-bold text-slate-700"
+                  title="Body Paragraph"
+                >
+                  P
+                </button>
+
+                <div className="h-4 w-px bg-slate-300 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("insertUnorderedList")}
+                  className="p-1.5 rounded hover:bg-slate-200 text-slate-700"
+                  title="Bullet List"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => execEditorFormat("insertOrderedList")}
+                  className="p-1.5 rounded hover:bg-slate-200 text-slate-700"
+                  title="Numbered List"
+                >
+                  <ListOrdered className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const snippet = displayedVerses
+                      .slice(0, 3)
+                      .map((v) => `(${v.v}) ${v.text}`)
+                      .join(" ");
+                    insertHtmlAtCursor(
+                      `<blockquote class="scripture-quote">${activeReferenceBadge} (${bibleVersion}) — "${snippet}"</blockquote><p></p>`
+                    );
+                  }}
+                  className="p-1.5 rounded hover:bg-slate-200 text-amber-800"
+                  title={`Insert Scripture Quote Block (${activeReferenceBadge})`}
+                >
+                  <Quote className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pkg = buildSermonPackageFromPassage({
+                      book: bibleBook,
+                      chapter: bibleChapter,
+                      version: bibleVersion,
+                      verses: passageVerses,
+                      mode: currentSermon.homileticalMode,
+                      verseStart: verseStartFilter,
+                      verseEnd: verseEndFilter,
+                    });
+                    insertHtmlAtCursor(
+                      `<blockquote class="illustration-box"><strong>Opening Illustration (${pkg.passageTag}):</strong> ${pkg.introIllustration}</blockquote><p></p>`
+                    );
+                    showToast(
+                      `Inserted intro illustration for ${pkg.passageTag}`
+                    );
+                  }}
+                  className="px-2 py-1 rounded hover:bg-blue-50 text-blue-700 font-medium flex items-center gap-1"
+                  title="Insert Opening Intro Illustration based on chosen Scripture"
+                >
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  <span>Illustration</span>
+                </button>
+              </div>
+
+              {/* Right: Pulpit Cue Badges & Audio Transcription Studio */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Cues:
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertHtmlAtCursor(
+                      ` <span class="cue-badge cue-slide">[SLIDE]</span> `
+                    )
+                  }
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                >
+                  [SLIDE]
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertHtmlAtCursor(
+                      ` <span class="cue-badge cue-pause">[PAUSE 3s]</span> `
+                    )
+                  }
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-yellow-50 text-yellow-800 hover:bg-yellow-100 border border-yellow-200"
+                >
+                  [PAUSE]
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertHtmlAtCursor(
+                      ` <span class="cue-badge cue-response">[RESPONSE]</span> `
+                    )
+                  }
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                >
+                  [RESPONSE]
+                </button>
+
+                <div className="h-4 w-px bg-slate-300 mx-0.5" />
+
+                <button
+                  type="button"
+                  onClick={() => setShowTranscribeModal(true)}
+                  className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 text-[11px] font-medium whitespace-nowrap"
+                  title="Open Audio Transcription Studio"
+                >
+                  Transcribe Audio
+                </button>
               </div>
             </div>
-          </div>
           )}
 
           {/* Editor Scroll Viewport */}
@@ -6859,7 +7588,7 @@ ${transitionHtml}`;
                           type="button"
                           onClick={() => {
                             setBibleTab("reader");
-                            setShowPassageGridPicker(true);
+                            setShowGridPicker(true);
                           }}
                           className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline underline-offset-2"
                         >
@@ -7213,7 +7942,7 @@ ${transitionHtml}`;
                       </div>
                       <button
                         type="button"
-                        onClick={() => setShowAudioStudioModal(true)}
+                        onClick={() => setShowTranscribeModal(true)}
                         className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0"
                       >
                         Open Audio Studio
@@ -7336,7 +8065,7 @@ ${transitionHtml}`;
                         type="button"
                         onClick={() => {
                           setBibleTab("reader");
-                          setShowPassageGridPicker(true);
+                          setShowGridPicker(true);
                         }}
                         className="text-xs font-semibold text-amber-800 hover:text-amber-950 text-left underline underline-offset-2"
                       >
