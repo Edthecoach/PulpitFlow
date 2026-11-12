@@ -45,6 +45,8 @@ import {
   SkipBack,
   SkipForward,
   AlertTriangle,
+  Moon,
+  Sun,
 } from "lucide-react";
 import {
   BIBLE_BOOK_CHAPTERS,
@@ -216,6 +218,18 @@ export default function App() {
   });
   const [showClassicBibleDropdowns, setShowClassicBibleDropdowns] =
     useState<boolean>(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("pulpitflow_dark_mode_v1") === "true";
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pulpitflow_dark_mode_v1", String(darkMode));
+    } catch {}
+  }, [darkMode]);
   type MobileSplitMode =
     | "50-50"
     | "65-35"
@@ -993,6 +1007,9 @@ export default function App() {
 
   const bibleReaderScrollRef = useRef<HTMLDivElement | null>(null);
   const isRestoringBibleScrollRef = useRef<boolean>(false);
+  const bibleScrollTimerRef = useRef<number | null>(null);
+  const flashVerseTimerRef = useRef<number | null>(null);
+  const [flashedVerseNum, setFlashedVerseNum] = useState<number | null>(null);
   const bibleChapterScrollPositionsRef = useRef<Record<string, number>>((() => {
     try {
       const saved = localStorage.getItem(BIBLE_SCROLL_STORAGE_KEY);
@@ -1026,26 +1043,32 @@ export default function App() {
     } catch {}
   };
 
-  const restoreBibleChapterScrollPosition = (refKey: string) => {
+  const restoreBibleChapterScrollPosition = (
+    refKey: string,
+    smooth: boolean = true
+  ) => {
     const savedTop = bibleChapterScrollPositionsRef.current[refKey] ?? 0;
     isRestoringBibleScrollRef.current = true;
+    if (bibleScrollTimerRef.current !== null) {
+      window.clearTimeout(bibleScrollTimerRef.current);
+    }
     window.requestAnimationFrame(() => {
       if (bibleReaderScrollRef.current) {
-        bibleReaderScrollRef.current.scrollTop = savedTop;
+        bibleReaderScrollRef.current.scrollTo({
+          top: savedTop,
+          behavior: smooth ? "smooth" : "auto",
+        });
       }
-      window.setTimeout(() => {
-        if (bibleReaderScrollRef.current) {
-          bibleReaderScrollRef.current.scrollTop = savedTop;
-        }
+      bibleScrollTimerRef.current = window.setTimeout(() => {
         isRestoringBibleScrollRef.current = false;
-      }, 75);
+      }, smooth ? 450 : 80);
     });
   };
 
   // Restore saved chapter scroll position when returning to the Scripture Reader tab
   useEffect(() => {
     if (bibleTab === "reader") {
-      restoreBibleChapterScrollPosition(`${bibleBook} ${bibleChapter}`);
+      restoreBibleChapterScrollPosition(`${bibleBook} ${bibleChapter}`, true);
     }
   }, [bibleTab]);
 
@@ -1505,14 +1528,126 @@ export default function App() {
     saveEditorSelection();
   };
 
-  // Scroll to a specific verse in the Bible reader
-  const scrollToVerseElement = (vNum: number) => {
-    setTimeout(() => {
-      const el = document.getElementById(`bible-verse-row-${vNum}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Wrap selected manuscript text (or insert a new block) in a [READ ALOUD] pulpit style block
+  const insertReadAloudCueBlock = () => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+
+    const sel = window.getSelection();
+    if (
+      lastCursorRangeRef.current &&
+      (!sel ||
+        sel.rangeCount === 0 ||
+        !editorRef.current.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ) {
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(lastCursorRangeRef.current);
       }
-    }, 80);
+    }
+
+    let selectedText = "";
+    const activeSel = window.getSelection();
+    if (
+      activeSel &&
+      activeSel.rangeCount > 0 &&
+      editorRef.current.contains(activeSel.getRangeAt(0).commonAncestorContainer)
+    ) {
+      selectedText = activeSel.toString().trim();
+    }
+
+    if (selectedText) {
+      const safeHtml = selectedText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n+/g, "<br/>");
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<blockquote class="read-aloud-block"><span class="cue-badge cue-read-aloud">[READ ALOUD]</span> <span class="read-aloud-body">${safeHtml}</span></blockquote><p></p>`
+      );
+      showToast("Wrapped selected text in [READ ALOUD] pulpit block");
+    } else {
+      const defaultReadText =
+        displayedVerses.length > 0
+          ? `${activeReferenceBadge} — "${displayedVerses[0].text}"`
+          : "Read this key statement aloud verbatim with slow, clear emphasis...";
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<blockquote class="read-aloud-block"><span class="cue-badge cue-read-aloud">[READ ALOUD]</span> <span class="read-aloud-body">${defaultReadText}</span></blockquote><p></p>`
+      );
+      showToast(
+        "Inserted [READ ALOUD] block (highlight manuscript text first to wrap selection)"
+      );
+    }
+
+    isInternalEditorUpdate.current = true;
+    updateCurrentSermon({ notes: editorRef.current.innerHTML });
+    saveEditorSelection();
+  };
+
+  // Smoothly scroll to a specific verse in the Bible reader (used for verse jumps & chapter transitions)
+  const scrollToVerseElement = (
+    vNum: number,
+    options?: {
+      align?: "start" | "center";
+      highlightPulse?: boolean;
+    }
+  ) => {
+    const alignMode = options?.align ?? "center";
+    const shouldPulse = options?.highlightPulse ?? vNum > 1;
+
+    isRestoringBibleScrollRef.current = true;
+    if (bibleScrollTimerRef.current !== null) {
+      window.clearTimeout(bibleScrollTimerRef.current);
+    }
+
+    if (shouldPulse) {
+      setFlashedVerseNum(vNum);
+      if (flashVerseTimerRef.current !== null) {
+        window.clearTimeout(flashVerseTimerRef.current);
+      }
+      flashVerseTimerRef.current = window.setTimeout(() => {
+        setFlashedVerseNum(null);
+      }, 1300);
+    }
+
+    window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        const container = bibleReaderScrollRef.current;
+        const el = document.getElementById(`bible-verse-row-${vNum}`);
+
+        if (container && el) {
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const relativeTop =
+            elRect.top - containerRect.top + container.scrollTop;
+          const targetTop =
+            alignMode === "start"
+              ? Math.max(0, relativeTop - 16)
+              : Math.max(
+                  0,
+                  relativeTop - container.clientHeight / 2 + elRect.height / 2
+                );
+
+          container.scrollTo({
+            top: targetTop,
+            behavior: "smooth",
+          });
+        } else if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: alignMode });
+        } else if (container && vNum <= 1) {
+          container.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        bibleScrollTimerRef.current = window.setTimeout(() => {
+          isRestoringBibleScrollRef.current = false;
+          saveCurrentBibleChapterScroll();
+        }, 480);
+      });
+    }, 65);
   };
 
   // Persist active Scripture selection and keep currentSermon.passageTag synchronized
@@ -1565,6 +1700,7 @@ export default function App() {
     if (startV === null) {
       setSelectedVerses([]);
       setFilterOnlyRange(false);
+      scrollToVerseElement(1, { align: "start", highlightPulse: false });
       return;
     }
 
@@ -1574,7 +1710,7 @@ export default function App() {
       .map((v) => v.v);
     setSelectedVerses(rangeNums);
     if (shouldScrollToVerse) {
-      scrollToVerseElement(startV);
+      scrollToVerseElement(startV, { align: "center", highlightPulse: true });
     }
   };
 
@@ -1584,7 +1720,8 @@ export default function App() {
     chapter: number,
     version: string,
     targetVerseStart: number | null = null,
-    targetVerseEnd: number | null = null
+    targetVerseEnd: number | null = null,
+    options?: { isInitialMount?: boolean }
   ): Promise<VerseItem[]> => {
     const requestId = ++latestPassageRequestIdRef.current;
     const maxCh = BIBLE_BOOK_CHAPTERS[book] || 150;
@@ -1599,6 +1736,8 @@ export default function App() {
     const hasSavedScrollForChapter =
       bibleChapterScrollPositionsRef.current[refKey] !== undefined &&
       bibleChapterScrollPositionsRef.current[refKey] > 0;
+    const preferSavedScroll =
+      Boolean(options?.isInitialMount) && hasSavedScrollForChapter;
 
     activeVerseRangeRef.current = {
       start: targetVerseStart,
@@ -1611,20 +1750,36 @@ export default function App() {
     setVerseStartFilter(targetVerseStart);
     setVerseEndFilter(targetVerseEnd);
 
+    const performPassageScroll = (
+      startVerse: number | null,
+      endVerse: number | null,
+      versesForChapter: VerseItem[]
+    ) => {
+      if (startVerse !== null) {
+        applyVerseRangeSelection(
+          startVerse,
+          endVerse ?? startVerse,
+          versesForChapter,
+          !preferSavedScroll
+        );
+        if (preferSavedScroll) {
+          restoreBibleChapterScrollPosition(refKey, false);
+        }
+      } else if (hasSavedScrollForChapter) {
+        restoreBibleChapterScrollPosition(refKey, !options?.isInitialMount);
+      } else {
+        scrollToVerseElement(1, { align: "start", highlightPulse: false });
+      }
+    };
+
     // Show embedded immediately if available while fetching full chapter
     if (EMBEDDED_BIBLE[refKey]) {
       setPassageVerses(EMBEDDED_BIBLE[refKey]);
-      if (targetVerseStart !== null) {
-        applyVerseRangeSelection(
-          targetVerseStart,
-          targetVerseEnd ?? targetVerseStart,
-          EMBEDDED_BIBLE[refKey],
-          !hasSavedScrollForChapter
-        );
-      }
-      if (targetVerseStart === null || hasSavedScrollForChapter) {
-        restoreBibleChapterScrollPosition(refKey);
-      }
+      performPassageScroll(
+        targetVerseStart,
+        targetVerseEnd,
+        EMBEDDED_BIBLE[refKey]
+      );
     }
 
     setIsLoadingBible(true);
@@ -1650,17 +1805,7 @@ export default function App() {
         setIsLoadingBible(false);
         const currentStart = activeVerseRangeRef.current.start;
         const currentEnd = activeVerseRangeRef.current.end;
-        if (currentStart !== null) {
-          applyVerseRangeSelection(
-            currentStart,
-            currentEnd ?? currentStart,
-            loaded,
-            !hasSavedScrollForChapter
-          );
-        }
-        if (currentStart === null || hasSavedScrollForChapter) {
-          restoreBibleChapterScrollPosition(refKey);
-        }
+        performPassageScroll(currentStart, currentEnd, loaded);
         return loaded;
       }
     } catch {
@@ -1678,17 +1823,7 @@ export default function App() {
     if (EMBEDDED_BIBLE[refKey]) {
       const fallback = EMBEDDED_BIBLE[refKey];
       setPassageVerses(fallback);
-      if (currentStart !== null) {
-        applyVerseRangeSelection(
-          currentStart,
-          currentEnd ?? currentStart,
-          fallback,
-          !hasSavedScrollForChapter
-        );
-      }
-      if (currentStart === null || hasSavedScrollForChapter) {
-        restoreBibleChapterScrollPosition(refKey);
-      }
+      performPassageScroll(currentStart, currentEnd, fallback);
       return fallback;
     } else {
       const synthesized: VerseItem[] = Array.from({ length: 12 }, (_, idx) => {
@@ -1702,17 +1837,7 @@ export default function App() {
         };
       });
       setPassageVerses(synthesized);
-      if (currentStart !== null) {
-        applyVerseRangeSelection(
-          currentStart,
-          currentEnd ?? currentStart,
-          synthesized,
-          !hasSavedScrollForChapter
-        );
-      }
-      if (currentStart === null || hasSavedScrollForChapter) {
-        restoreBibleChapterScrollPosition(refKey);
-      }
+      performPassageScroll(currentStart, currentEnd, synthesized);
       return synthesized;
     }
   };
@@ -1724,7 +1849,8 @@ export default function App() {
       initialPassageConfig.chapter,
       initialPassageConfig.version,
       initialPassageConfig.vStart,
-      initialPassageConfig.vEnd
+      initialPassageConfig.vEnd,
+      { isInitialMount: true }
     );
   }, []);
 
@@ -2697,7 +2823,9 @@ ${transitionHtml}`;
 
   return (
     <div
-      className="h-full bg-slate-50 text-slate-800 flex flex-col font-sans overflow-hidden select-none"
+      className={`h-full bg-slate-50 text-slate-800 flex flex-col font-sans overflow-hidden select-none transition-colors duration-200 ${
+        darkMode ? "dark-theme" : ""
+      }`}
       onClick={() => {
         setShowSermonMenu(false);
         setShowQuickJumpMenu(false);
@@ -3306,6 +3434,49 @@ ${transitionHtml}`;
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Preach Mode</span>
+          </button>
+
+          {/* Dark / Light Background Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setDarkMode((prev) => {
+                const next = !prev;
+                showToast(
+                  next
+                    ? "Switched to Dark Background"
+                    : "Switched to Light Background"
+                );
+                return next;
+              });
+            }}
+            aria-label={
+              darkMode
+                ? "Switch to Light Background"
+                : "Switch to Dark Background"
+            }
+            title={
+              darkMode
+                ? "Switch to Light Background"
+                : "Switch to Dark Background"
+            }
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              darkMode
+                ? "border-amber-500/40 bg-slate-800 text-amber-300 hover:bg-slate-700"
+                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+            }`}
+          >
+            {darkMode ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden lg:inline">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-slate-600" />
+                <span className="hidden lg:inline">Dark</span>
+              </>
+            )}
           </button>
 
           {/* Export Dropdown */}
@@ -4338,8 +4509,10 @@ ${transitionHtml}`;
                         <div
                           id={`bible-verse-row-${v.v}`}
                           key={v.v}
-                          className={`group relative py-1.5 px-2.5 rounded-lg transition-colors ${
-                            isPopoverOpen
+                          className={`group relative py-1.5 px-2.5 rounded-lg transition-all duration-300 ${
+                            flashedVerseNum === v.v
+                              ? "bg-amber-100/95 ring-2 ring-amber-400 shadow-xs"
+                              : isPopoverOpen
                               ? "bg-amber-50/95 ring-1 ring-amber-400/80 shadow-xs"
                               : isSelected
                               ? "bg-amber-100/80 ring-1 ring-amber-300/70"
@@ -4360,9 +4533,16 @@ ${transitionHtml}`;
                                     );
                                     return;
                                   }
-                                  setActiveVersePopoverNum((prev) =>
-                                    prev === v.v ? null : v.v
-                                  );
+                                  setActiveVersePopoverNum((prev) => {
+                                    const next = prev === v.v ? null : v.v;
+                                    if (next !== null) {
+                                      scrollToVerseElement(next, {
+                                        align: "center",
+                                        highlightPulse: false,
+                                      });
+                                    }
+                                    return next;
+                                  });
                                 }}
                                 className={`relative ${
                                   bibleFontSize >= 22 ? "text-sm" : "text-xs"
@@ -4614,6 +4794,13 @@ ${transitionHtml}`;
                                         setActiveVersePopoverNum(
                                           prevDisplayedVerse.v
                                         );
+                                        scrollToVerseElement(
+                                          prevDisplayedVerse.v,
+                                          {
+                                            align: "center",
+                                            highlightPulse: true,
+                                          }
+                                        );
                                       }
                                     }}
                                     className="px-1.5 py-0.5 text-[11px] font-mono font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-35"
@@ -4632,6 +4819,13 @@ ${transitionHtml}`;
                                       if (nextDisplayedVerse) {
                                         setActiveVersePopoverNum(
                                           nextDisplayedVerse.v
+                                        );
+                                        scrollToVerseElement(
+                                          nextDisplayedVerse.v,
+                                          {
+                                            align: "center",
+                                            highlightPulse: true,
+                                          }
                                         );
                                       }
                                     }}
@@ -6494,6 +6688,16 @@ ${transitionHtml}`;
                 </span>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={insertReadAloudCueBlock}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-950 hover:bg-amber-200 border border-amber-300 shadow-2xs transition-colors"
+                  title="Wrap selected manuscript text in a high-contrast [READ ALOUD] style block for Preach Mode"
+                >
+                  [READ ALOUD]
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertHtmlAtCursor(
                       ` <span class="cue-badge cue-slide">[SLIDE]</span> `
@@ -6505,6 +6709,7 @@ ${transitionHtml}`;
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertHtmlAtCursor(
                       ` <span class="cue-badge cue-pause">[PAUSE 3s]</span> `
@@ -6516,6 +6721,7 @@ ${transitionHtml}`;
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertHtmlAtCursor(
                       ` <span class="cue-badge cue-response">[RESPONSE]</span> `
